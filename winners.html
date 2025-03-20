@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSE6 Winners Panel</title>
+    <link rel="stylesheet" href="css/winners.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="login-section" id="loginSection">
+            <h2>Winners Panel Access</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <input type="password" id="adminPassword" placeholder="Enter Password" required>
+                </div>
+                <button type="submit">View Winners</button>
+            </form>
+        </div>
+
+        <div class="winners-section" id="winnersSection" style="display: none;">
+            <h1>🎉 CSE6 Winners Panel 🎉</h1>
+            <div class="winners-container">
+                <!-- Winner categories will be dynamically loaded here -->
+            </div>
+            <button id="logoutBtn" class="logout-btn">Logout</button>
+        </div>
+    </div>
+    
+    <!-- Include the data.js file to access categories -->
+    <script src="js/data.js"></script>
+    <script src="js/winners.js"></script>
+</body>
+</html> 

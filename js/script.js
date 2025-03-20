@@ -39,14 +39,14 @@ searchInput.addEventListener('input', handleSearch);
 prevCategoryBtn.addEventListener('click', showPreviousCategory);
 nextCategoryBtn.addEventListener('click', showNextCategory);
 
-// Input validation for 4-digit code
+// Input validation for 6-digit code
 codeInput.addEventListener('input', function(e) {
     // Only allow numbers
     this.value = this.value.replace(/[^0-9]/g, '');
     
-    // Limit to 4 digits
-    if (this.value.length > 4) {
-        this.value = this.value.slice(0, 4);
+    // Limit to 6 digits
+    if (this.value.length > 6) {
+        this.value = this.value.slice(0, 6);
     }
 });
 
@@ -76,7 +76,7 @@ function handleLogin() {
     
     // Validate input
     if (!code) {
-        showError('Please enter your 4-digit code');
+        showError('Please enter your 6-digit code');
         return;
     }
     

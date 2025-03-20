@@ -1,12 +1,12 @@
 # CSE6 Poll System
 
-A professional, fully responsive, dark-themed login and polling system for CSE6 students. This system allows students to log in using a unique 4-digit code and vote for their classmates in various fun categories.
+A professional, fully responsive, dark-themed login and polling system for CSE6 students. This system allows students to log in using a unique 6-digit code and vote for their classmates in various fun categories.
 
 ## Features
 
-- **Secure Login**: 4-digit code authentication (predefined for each student)
-- **Admin Portal**: Special access with code 9999 to view all voting results
-- **Voting System**: Students can vote for nominees in 15 different categories
+- **Secure Login**: 6-digit code authentication (unique for each student)
+- **Admin Portal**: Special access with code 999999 to view all voting results
+- **Voting System**: Students can vote for nominees in various categories
 - **Real-Time Updates**: Vote counts update instantly
 - **Dark Theme UI**: Modern and sleek interface with glassmorphism design
 - **Responsive Design**: Works seamlessly on mobile, tablet, and desktop screens
@@ -17,7 +17,7 @@ A professional, fully responsive, dark-themed login and polling system for CSE6 
 
 ### For Students
 
-1. Enter your assigned 4-digit code in the login screen (codes start from 1001)
+1. Enter your assigned 6-digit code in the login screen
 2. Browse through the different categories on your dashboard
 3. Select one nominee for each category by clicking on their name
 4. Your votes are automatically saved and can be changed at any time
@@ -25,7 +25,7 @@ A professional, fully responsive, dark-themed login and polling system for CSE6 
 
 ### For Admin
 
-1. Enter code `9999` to access the admin dashboard
+1. Enter code `999999` to access the admin dashboard
 2. View real-time voting results for all categories
 3. See voting statistics including total votes and most popular categories
 4. Search for specific categories or nominees using the search bar
@@ -71,6 +71,6 @@ The system includes voting for the following categories:
 
 1. Clone or download this repository
 2. Open `index.html` in a web browser
-3. Login with a student code (1001-1060) or admin code (9999)
+3. Login with a student code (1001-1060) or admin code (999999)
 
 No server setup is required as the application runs entirely in the browser using local storage. 
