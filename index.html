@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSE6 Poll System</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>CSE6 Poll System</h1>
+                <p>Enter your 4-digit code to login</p>
+            </div>
+            <div class="login-form">
+                <div class="input-group">
+                    <div class="input-field">
+                        <input type="password" id="code-input" maxlength="4" placeholder="Enter 4-digit code">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <div class="error-message" id="error-message"></div>
+                </div>
+                <button id="login-btn" class="btn login-btn">
+                    <span>Login</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+            <div class="login-footer">
+                <p>CSE6 Batch 2024</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Dashboard (Hidden by default) -->
+    <div class="dashboard student-dashboard" id="student-dashboard">
+        <div class="dashboard-header">
+            <h1>Welcome, <span id="student-name">Student</span>!</h1>
+            <button id="student-logout-btn" class="btn logout-btn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+        <div class="dashboard-content">
+            <h2>Vote for Your Favorite Classmates</h2>
+            <p class="instruction">Select one nominee for each category</p>
+            
+            <div class="category-navigation">
+                <div class="navigation-controls">
+                    <button class="nav-btn" id="prev-category-btn" disabled>
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </button>
+                    <div class="category-counter">
+                        <span id="current-category">1</span>/<span id="total-categories">15</span>
+                    </div>
+                    <button class="nav-btn" id="next-category-btn">
+                        Next <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="category-progress"></div>
+                </div>
+            </div>
+            
+            <div class="categories-container" id="categories-container">
+                <!-- Categories will be dynamically loaded here -->
+            </div>
+        </div>
+        <div class="dashboard-footer">
+            <p>CSE6 Batch 2024 | One vote per category per student</p>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard (Hidden by default) -->
+    <div class="dashboard admin-dashboard" id="admin-dashboard">
+        <div class="dashboard-header">
+            <h1>Admin Dashboard</h1>
+            <div class="admin-controls">
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search categories or students...">
+                    <i class="fas fa-search"></i>
+                </div>
+                <button id="admin-logout-btn" class="btn logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </div>
+        <div class="dashboard-content">
+            <div class="statistics-container">
+                <h2>Voting Statistics</h2>
+                <div class="statistics-cards">
+                    <div class="stat-card">
+                        <h3>Total Votes</h3>
+                        <p id="total-votes">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Students Voted</h3>
+                        <p id="students-voted">0/60</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Most Popular Category</h3>
+                        <p id="popular-category">-</p>
+                    </div>
+                </div>
+                
+                <!-- Advanced Analytics Section -->
+                <div class="admin-stats-grid">
+                    <div class="admin-chart-card">
+                        <h3>Votes by Category</h3>
+                        <div class="chart-container">
+                            <canvas id="category-votes-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="admin-chart-card">
+                        <h3>Top Nominees Overall</h3>
+                        <div class="chart-container">
+                            <canvas id="top-nominees-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="admin-chart-card">
+                        <h3>Voting Activity</h3>
+                        <div class="chart-container">
+                            <canvas id="voting-activity-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="results-container">
+                <h2>Poll Results</h2>
+                <div class="results-wrapper" id="results-wrapper">
+                    <!-- Results will be dynamically loaded here -->
+                </div>
+            </div>
+        </div>
+        <div class="dashboard-footer">
+            <p>CSE6 Batch 2024 | Admin Portal</p>
+        </div>
+    </div>
+
+    <script src="js/data.js"></script>
+    <script src="js/script.js"></script>
+</body>
+</html> 
