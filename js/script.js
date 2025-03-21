@@ -62,27 +62,29 @@ async function initializeApp() {
     const token = localStorage.getItem('token');
     if (token) {
         try {
-            const response = await fetch(`${API_URL}/votes`, {
+            // First, get the user's votes
+            const votesResponse = await fetch(`${API_URL}/votes`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
             });
             
-            if (response.ok) {
-                const userVotes = await response.json();
-                votes = userVotes.reduce((acc, vote) => {
-                    acc[vote.categoryId] = vote.nomineeId;
-                    return acc;
-                }, {});
-                
-                currentUser = JSON.parse(localStorage.getItem('currentUser'));
-                if (currentUser.id === ADMIN_CODE) {
-                    showAdminDashboard();
-                } else {
-                    showStudentDashboard();
-                }
+            if (!votesResponse.ok) {
+                throw new Error('Failed to fetch votes');
+            }
+
+            const userVotes = await votesResponse.json();
+            // Transform votes array into an object for easier access
+            votes = userVotes.reduce((acc, vote) => {
+                acc[vote.categoryId] = vote.nomineeId;
+                return acc;
+            }, {});
+            
+            currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (currentUser.id === ADMIN_CODE) {
+                await showAdminDashboard();
             } else {
-                handleLogout();
+                showStudentDashboard();
             }
         } catch (error) {
             console.error('Error initializing app:', error);
@@ -94,14 +96,13 @@ async function initializeApp() {
 async function handleLogin() {
     const code = codeInput.value.trim();
     
-    // Validate input
     if (!code) {
         showError('Please enter your 6-digit code');
         return;
     }
     
     try {
-        const response = await fetch(`${API_URL}/login`, {
+        const loginResponse = await fetch(`${API_URL}/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -109,38 +110,40 @@ async function handleLogin() {
             body: JSON.stringify({ code })
         });
 
-        if (!response.ok) {
+        if (!loginResponse.ok) {
             throw new Error('Invalid code');
         }
 
-        const data = await response.json();
+        const data = await loginResponse.json();
         currentUser = data.user;
         localStorage.setItem('token', data.token);
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
-        // Get user's votes
+        // Get user's votes after login
         const votesResponse = await fetch(`${API_URL}/votes`, {
             headers: {
                 'Authorization': `Bearer ${data.token}`
             }
         });
 
-        if (votesResponse.ok) {
-            const userVotes = await votesResponse.json();
-            votes = userVotes.reduce((acc, vote) => {
-                acc[vote.categoryId] = vote.nomineeId;
-                return acc;
-            }, {});
+        if (!votesResponse.ok) {
+            throw new Error('Failed to fetch votes');
         }
 
+        const userVotes = await votesResponse.json();
+        votes = userVotes.reduce((acc, vote) => {
+            acc[vote.categoryId] = vote.nomineeId;
+            return acc;
+        }, {});
+
         if (currentUser.id === ADMIN_CODE) {
-            showAdminDashboard();
+            await showAdminDashboard();
         } else {
             showStudentDashboard();
         }
     } catch (error) {
-        showError('Invalid code. Please try again.');
         console.error('Login error:', error);
+        showError('Invalid code. Please try again.');
     }
 }
 
@@ -181,59 +184,52 @@ function showStudentDashboard() {
     updateNavigation();
 }
 
-function showAdminDashboard() {
-    // Hide login container and show admin dashboard
+async function showAdminDashboard() {
     document.querySelector('.container').style.display = 'none';
     adminDashboard.style.display = 'block';
     
-    // Add reset votes button if it doesn't exist
-    if (!document.getElementById('reset-votes-btn')) {
-        const resetBtn = document.createElement('button');
-        resetBtn.id = 'reset-votes-btn';
-        resetBtn.classList.add('btn', 'reset-btn');
-        resetBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Reset All Votes';
-        resetBtn.addEventListener('click', confirmResetVotes);
-        
-        // Add to admin controls
-        const adminControls = document.querySelector('.admin-controls');
-        adminControls.insertBefore(resetBtn, adminControls.firstChild);
-    }
-
-    // Add winners page button if it doesn't exist
-    if (!document.getElementById('view-winners-btn')) {
-        const winnersBtn = document.createElement('button');
-        winnersBtn.id = 'view-winners-btn';
-        winnersBtn.classList.add('btn', 'winners-btn');
-        winnersBtn.innerHTML = '<i class="fas fa-trophy"></i> View Winners';
-        winnersBtn.addEventListener('click', () => {
-            window.open('winners.html', '_blank');
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/admin/votes`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
         });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch admin data');
+        }
+
+        const allVotes = await response.json();
         
-        // Add to admin controls
-        const adminControls = document.querySelector('.admin-controls');
-        adminControls.insertBefore(winnersBtn, adminControls.firstChild);
+        // Update the votes object with all votes
+        votes = allVotes.reduce((acc, vote) => {
+            if (!acc[vote.categoryId]) {
+                acc[vote.categoryId] = {};
+            }
+            acc[vote.categoryId][vote.userId] = vote.nomineeId;
+            return acc;
+        }, {});
+
+        // Render results and update statistics
+        renderResults();
+        updateStatistics();
+    } catch (error) {
+        console.error('Error loading admin dashboard:', error);
+        showError('Failed to load admin data');
+        handleLogout();
     }
-    
-    // Render results
-    renderResults();
-    
-    // Update statistics
-    updateStatistics();
 }
 
 function handleLogout() {
-    // Clear current user and token
     currentUser = null;
     votes = {};
-    localStorage.removeItem('currentUser');
     localStorage.removeItem('token');
+    localStorage.removeItem('currentUser');
     
-    // Hide dashboards and show login container
     document.querySelector('.container').style.display = 'flex';
     studentDashboard.style.display = 'none';
     adminDashboard.style.display = 'none';
-    
-    // Clear input
     codeInput.value = '';
 }
 
@@ -451,11 +447,22 @@ async function handleVote(categoryId, nomineeId) {
             body: JSON.stringify({ categoryId, nomineeId })
         });
 
-        if (response.ok) {
-            votes[categoryId] = nomineeId;
-            updateVoteDisplay(categoryId);
-        } else {
+        if (!response.ok) {
             throw new Error('Failed to record vote');
+        }
+
+        // Update local votes object
+        votes[categoryId] = nomineeId;
+        
+        // Show success message
+        showVoteSuccess();
+        
+        // Update UI
+        renderCategories();
+        
+        // If in admin dashboard, refresh the results
+        if (currentUser.id === ADMIN_CODE) {
+            await showAdminDashboard();
         }
     } catch (error) {
         console.error('Error recording vote:', error);
@@ -800,4 +807,35 @@ winnersStyle.textContent = `
         margin-right: 8px;
     }
 `;
-document.head.appendChild(winnersStyle); 
+document.head.appendChild(winnersStyle);
+
+// Add auto-refresh for admin dashboard
+let adminRefreshInterval;
+
+function startAdminRefresh() {
+    if (currentUser?.id === ADMIN_CODE) {
+        adminRefreshInterval = setInterval(async () => {
+            await showAdminDashboard();
+        }, 30000); // Refresh every 30 seconds
+    }
+}
+
+function stopAdminRefresh() {
+    if (adminRefreshInterval) {
+        clearInterval(adminRefreshInterval);
+    }
+}
+
+// Update the existing showAdminDashboard function to start refresh
+const originalShowAdminDashboard = showAdminDashboard;
+showAdminDashboard = async function() {
+    await originalShowAdminDashboard();
+    startAdminRefresh();
+};
+
+// Update the existing handleLogout function to stop refresh
+const originalHandleLogout = handleLogout;
+handleLogout = function() {
+    stopAdminRefresh();
+    originalHandleLogout();
+}; 

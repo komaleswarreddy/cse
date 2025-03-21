@@ -9,9 +9,15 @@ async function connectToDatabase() {
         return cachedDb;
     }
 
-    const connection = await mongoose.connect(process.env.MONGODB_URI);
-    cachedDb = connection;
-    return connection;
+    try {
+        const connection = await mongoose.connect(process.env.MONGODB_URI);
+        console.log('MongoDB connected successfully');
+        cachedDb = connection;
+        return connection;
+    } catch (error) {
+        console.error('MongoDB connection error:', error);
+        throw error;
+    }
 }
 
 // Models
@@ -41,6 +47,7 @@ const verifyToken = (authHeader) => {
     try {
         return jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
+        console.error('Token verification error:', err);
         throw new Error('Invalid token');
     }
 };
@@ -52,7 +59,8 @@ exports.handler = async (event, context) => {
     const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Cache-Control': 'no-cache' // Prevent caching
     };
 
     // Handle OPTIONS request
@@ -68,12 +76,17 @@ exports.handler = async (event, context) => {
         const path = event.path.replace('/.netlify/functions/api', '');
         const body = JSON.parse(event.body || '{}');
 
+        console.log(`Processing ${event.httpMethod} request to ${path}`);
+
         // Login route
         if (path === '/login' && event.httpMethod === 'POST') {
             const { code } = body;
+            console.log('Login attempt for code:', code);
+            
             const user = await User.findOne({ id: parseInt(code) });
             
             if (!user) {
+                console.log('Invalid login attempt for code:', code);
                 return {
                     statusCode: 401,
                     headers,
@@ -82,6 +95,8 @@ exports.handler = async (event, context) => {
             }
 
             const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+            console.log('Successful login for user:', user.name);
+            
             return {
                 statusCode: 200,
                 headers,
@@ -94,6 +109,7 @@ exports.handler = async (event, context) => {
         try {
             userData = verifyToken(event.headers.authorization);
         } catch (error) {
+            console.error('Token verification failed:', error.message);
             return {
                 statusCode: 401,
                 headers,
@@ -106,13 +122,17 @@ exports.handler = async (event, context) => {
             const { categoryId, nomineeId } = body;
             const userId = userData.userId;
 
+            console.log(`Processing vote - User: ${userId}, Category: ${categoryId}, Nominee: ${nomineeId}`);
+
             const existingVote = await Vote.findOne({ userId, categoryId });
             if (existingVote) {
                 existingVote.nomineeId = nomineeId;
                 existingVote.timestamp = Date.now();
                 await existingVote.save();
+                console.log('Updated existing vote');
             } else {
                 await Vote.create({ userId, categoryId, nomineeId });
+                console.log('Created new vote');
             }
 
             return {
@@ -124,7 +144,10 @@ exports.handler = async (event, context) => {
 
         // Get user votes
         if (path === '/votes' && event.httpMethod === 'GET') {
+            console.log(`Fetching votes for user: ${userData.userId}`);
             const votes = await Vote.find({ userId: userData.userId });
+            console.log(`Found ${votes.length} votes for user`);
+            
             return {
                 statusCode: 200,
                 headers,
@@ -135,13 +158,18 @@ exports.handler = async (event, context) => {
         // Admin routes
         if (path === '/admin/votes' && event.httpMethod === 'GET') {
             if (userData.userId !== 999999) {
+                console.log('Unauthorized admin access attempt from user:', userData.userId);
                 return {
                     statusCode: 403,
                     headers,
                     body: JSON.stringify({ message: 'Admin access required' })
                 };
             }
-            const votes = await Vote.find();
+            
+            console.log('Fetching all votes for admin');
+            const votes = await Vote.find().sort({ timestamp: -1 });
+            console.log(`Found ${votes.length} total votes`);
+            
             return {
                 statusCode: 200,
                 headers,
@@ -149,17 +177,18 @@ exports.handler = async (event, context) => {
             };
         }
 
+        console.log('Route not found:', path);
         return {
             statusCode: 404,
             headers,
             body: JSON.stringify({ message: 'Route not found' })
         };
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Server error:', error);
         return {
             statusCode: 500,
             headers,
-            body: JSON.stringify({ message: 'Server error' })
+            body: JSON.stringify({ message: 'Server error', error: error.message })
         };
     }
 }; 
