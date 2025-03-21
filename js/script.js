@@ -19,8 +19,15 @@ const currentCategoryEl = document.getElementById('current-category');
 const totalCategoriesEl = document.getElementById('total-categories');
 const categoryProgressBar = document.getElementById('category-progress');
 
-// API URL
-const API_URL = '/.netlify/functions/api';
+// ADMIN_CODE is already defined in data.js
+
+// API URL - Check if running locally
+const API_URL = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' 
+    ? 'http://localhost:5000/api' 
+    : '/.netlify/functions/api';
+
+// Enable local mode for testing without a server
+const LOCAL_MODE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
 
 // State variables
 let currentUser = null;
@@ -81,10 +88,10 @@ async function initializeApp() {
             }, {});
             
             currentUser = JSON.parse(localStorage.getItem('currentUser'));
-            if (currentUser.id === ADMIN_CODE) {
+        if (currentUser.id === ADMIN_CODE) {
                 await showAdminDashboard();
-            } else {
-                showStudentDashboard();
+        } else {
+            showStudentDashboard();
             }
         } catch (error) {
             console.error('Error initializing app:', error);
@@ -100,11 +107,15 @@ async function handleLogin() {
         showError('Please enter your 6-digit code');
         return;
     }
-
+    
     if (!/^\d{6}$/.test(code)) {
         showError('Please enter a valid 6-digit code');
         return;
     }
+    
+    // Check if this is admin login
+    const isAdmin = parseInt(code) === ADMIN_CODE;
+    console.log('Login attempt - Admin check:', isAdmin, 'Code:', code, 'ADMIN_CODE:', ADMIN_CODE);
     
     try {
         // Show loading state
@@ -112,19 +123,49 @@ async function handleLogin() {
         loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
         
         console.log('Attempting login with code:', code);
-        const loginResponse = await fetch(`${API_URL}/login`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ code })
-        });
-
-        const data = await loginResponse.json();
-        console.log('Login response:', data);
-
-        if (!loginResponse.ok) {
-            throw new Error(data.message || 'Login failed');
+        
+        let data;
+        
+        if (LOCAL_MODE) {
+            // Local mode - fetch will be intercepted by localApi.js
+            console.log('Using local mode for login');
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code })
+                });
+                
+                // Check if response is ok
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Login failed');
+                }
+                
+                data = await response.json();
+                console.log('Login response:', data);
+            } catch (error) {
+                console.error('Local login error:', error);
+                throw error;
+            }
+        } else {
+            // Production mode - use real API
+            const response = await fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ code })
+            });
+            
+            data = await response.json();
+            console.log('Login response:', data);
+            
+            if (!response.ok) {
+                throw new Error(data.message || 'Login failed');
+            }
         }
 
         console.log('Login successful:', data.user);
@@ -132,25 +173,58 @@ async function handleLogin() {
         localStorage.setItem('token', data.token);
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
-        // Get user's votes after login
-        console.log('Fetching user votes...');
-        const votesResponse = await fetch(`${API_URL}/votes`, {
-            headers: {
-                'Authorization': `Bearer ${data.token}`
+        // Get user's votes
+        if (LOCAL_MODE) {
+            try {
+                // In local mode, fetch will be intercepted by localApi.js
+                const votesResponse = await fetch(`${API_URL}/votes`, {
+                    headers: {
+                        'Authorization': `Bearer ${data.token}`
+                    }
+                });
+                
+                if (!votesResponse.ok) {
+                    throw new Error('Failed to fetch votes');
+                }
+                
+                const userVotes = await votesResponse.json();
+                console.log('User votes from API:', userVotes);
+                
+                // Transform votes array into an object for easier access
+                votes = {};
+                userVotes.forEach(vote => {
+                    // Make sure to convert categoryId to string for consistency
+                    votes[vote.categoryId.toString()] = vote.nomineeId;
+                });
+                console.log('Transformed votes object:', votes);
+            } catch (error) {
+                console.warn('Error fetching votes in local mode:', error);
+                votes = {};
             }
-        });
+        } else {
+            // In production, fetch from API
+            console.log('Fetching user votes...');
+            const votesResponse = await fetch(`${API_URL}/votes`, {
+                headers: {
+                    'Authorization': `Bearer ${data.token}`
+                }
+            });
 
-        if (!votesResponse.ok) {
-            console.error('Failed to fetch votes:', await votesResponse.text());
-            throw new Error('Failed to fetch votes');
+            if (!votesResponse.ok) {
+                console.error('Failed to fetch votes:', await votesResponse.text());
+                throw new Error('Failed to fetch votes');
+            }
+
+            const userVotes = await votesResponse.json();
+            console.log('User votes from API:', userVotes);
+            
+            // Transform votes array into an object for easier access
+            votes = {};
+            userVotes.forEach(vote => {
+                votes[vote.categoryId.toString()] = vote.nomineeId;
+            });
+            console.log('Transformed votes object:', votes);
         }
-
-        const userVotes = await votesResponse.json();
-        console.log('User votes:', userVotes);
-        votes = userVotes.reduce((acc, vote) => {
-            acc[vote.categoryId] = vote.nomineeId;
-            return acc;
-        }, {});
 
         if (currentUser.id === ADMIN_CODE) {
             await showAdminDashboard();
@@ -209,7 +283,16 @@ async function showAdminDashboard() {
     adminDashboard.style.display = 'block';
     
     try {
+        // Always use the fetch API approach for consistency, 
+        // the localApi.js will intercept in local mode
+        console.log('Fetching admin data');
         const token = localStorage.getItem('token');
+        console.log('Using admin token:', token);
+        
+        // Debug current user
+        console.log('Current user:', currentUser);
+        console.log('Admin code:', ADMIN_CODE);
+        
         const response = await fetch(`${API_URL}/admin/votes`, {
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -217,23 +300,49 @@ async function showAdminDashboard() {
         });
 
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Admin response error:', errorText);
             throw new Error('Failed to fetch admin data');
         }
 
         const allVotes = await response.json();
+        console.log('Admin votes from API:', allVotes);
         
         // Update the votes object with all votes
-        votes = allVotes.reduce((acc, vote) => {
-            if (!acc[vote.categoryId]) {
-                acc[vote.categoryId] = {};
+        // Reset votes object first to avoid stale data
+        votes = {};
+        
+        // Group votes by category for easier analysis
+        allVotes.forEach(vote => {
+            // Skip invalid votes that don't have required properties
+            if (!vote || vote.categoryId === null || vote.categoryId === undefined || 
+                vote.userId === null || vote.userId === undefined || 
+                vote.nomineeId === null || vote.nomineeId === undefined) {
+                console.warn('Skipping invalid vote:', vote);
+                return; // Skip this iteration
             }
-            acc[vote.categoryId][vote.userId] = vote.nomineeId;
-            return acc;
-        }, {});
+            
+            const categoryId = vote.categoryId.toString();
+            const userId = vote.userId.toString(); // Convert userId to string for consistency
+            const nomineeId = vote.nomineeId;
+            
+            if (!votes[categoryId]) {
+                votes[categoryId] = {};
+            }
+            
+            votes[categoryId][userId] = nomineeId;
+        });
+        
+        console.log('Processed votes by category:', votes);
 
         // Render results and update statistics
         renderResults();
         updateStatistics();
+        
+        // Add "Reset All Votes" button after a delay to ensure DOM is ready
+        setTimeout(() => {
+            addResetButton();
+        }, 500);
     } catch (error) {
         console.error('Error loading admin dashboard:', error);
         showError('Failed to load admin data');
@@ -421,42 +530,73 @@ function renderResults() {
 }
 
 function updateStatistics() {
-    // Calculate total votes
-    const totalVotes = Object.values(votes).reduce((total, userVotes) => 
-        total + Object.keys(userVotes).length, 0
-    );
-    
-    // Calculate students voted
-    const studentsVoted = Object.keys(votes).length;
-    
-    // Find most popular category
-    const categoryCounts = {};
-    Object.values(votes).forEach(userVotes => {
-        Object.keys(userVotes).forEach(categoryId => {
-            categoryCounts[categoryId] = (categoryCounts[categoryId] || 0) + 1;
-        });
-    });
-    
-    let popularCategoryId = null;
-    let maxVotes = 0;
-    
-    for (const [categoryId, count] of Object.entries(categoryCounts)) {
-        if (count > maxVotes) {
-            maxVotes = count;
-            popularCategoryId = categoryId;
+    try {
+        // Safety check - make sure votes is an object
+        if (!votes || typeof votes !== 'object') {
+            console.warn('Invalid votes object in updateStatistics:', votes);
+            return;
         }
+        
+        // Calculate total votes - safely handle potentially malformed data
+        let totalVotes = 0;
+        try {
+            totalVotes = Object.values(votes).reduce((total, userVotes) => {
+                if (!userVotes || typeof userVotes !== 'object') return total;
+                return total + Object.keys(userVotes).length;
+            }, 0);
+        } catch (error) {
+            console.error('Error calculating total votes:', error);
+            totalVotes = 0;
+        }
+        
+        // Calculate students voted
+        const studentsVoted = Object.keys(votes).length;
+        
+        // Find most popular category
+        const categoryCounts = {};
+        try {
+            Object.values(votes).forEach(userVotes => {
+                if (!userVotes || typeof userVotes !== 'object') return;
+                
+                Object.keys(userVotes).forEach(categoryId => {
+                    if (categoryId) {
+                        categoryCounts[categoryId] = (categoryCounts[categoryId] || 0) + 1;
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Error counting category votes:', error);
+        }
+        
+        let popularCategoryId = null;
+        let maxVotes = 0;
+        
+        for (const [categoryId, count] of Object.entries(categoryCounts)) {
+            if (count > maxVotes) {
+                maxVotes = count;
+                popularCategoryId = categoryId;
+            }
+        }
+        
+        let popularCategory = '-';
+        if (popularCategoryId && categories) {
+            const foundCategory = categories.find(c => c && c.id === parseInt(popularCategoryId));
+            popularCategory = foundCategory?.name || '-';
+        }
+        
+        // Update UI
+        if (totalVotesEl) totalVotesEl.textContent = totalVotes;
+        if (studentsVotedEl) studentsVotedEl.textContent = `${studentsVoted}/60`;
+        if (popularCategoryEl) popularCategoryEl.textContent = popularCategory;
+    } catch (error) {
+        console.error('Error in updateStatistics:', error);
     }
-    
-    const popularCategory = categories.find(c => c.id === parseInt(popularCategoryId))?.name || '-';
-    
-    // Update UI
-    totalVotesEl.textContent = totalVotes;
-    studentsVotedEl.textContent = `${studentsVoted}/60`;
-    popularCategoryEl.textContent = popularCategory;
 }
 
 async function handleVote(categoryId, nomineeId) {
     try {
+        console.log(`Submitting vote: Category ${categoryId}, Nominee ${nomineeId}`);
+        
         const token = localStorage.getItem('token');
         const response = await fetch(`${API_URL}/vote`, {
             method: 'POST',
@@ -464,7 +604,10 @@ async function handleVote(categoryId, nomineeId) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ categoryId, nomineeId })
+            body: JSON.stringify({ 
+                categoryId: categoryId.toString(), 
+                nomineeId 
+            })
         });
 
         if (!response.ok) {
@@ -472,38 +615,58 @@ async function handleVote(categoryId, nomineeId) {
         }
 
         // Update local votes object
-        votes[categoryId] = nomineeId;
+        votes[categoryId.toString()] = nomineeId;
+        console.log('Updated votes object after voting:', votes);
         
         // Show success message
         showVoteSuccess();
         
         // Update UI
         renderCategories();
-        
-        // If in admin dashboard, refresh the results
-        if (currentUser.id === ADMIN_CODE) {
-            await showAdminDashboard();
-        }
     } catch (error) {
         console.error('Error recording vote:', error);
-        showError('Failed to record vote. Please try again.');
+        showError(error.message || 'Failed to record vote. Please try again.');
     }
 }
 
 function getUserVoteForCategory(categoryId) {
-    if (!votes[categoryId]) return null;
-    return votes[categoryId];
+    const categoryIdStr = categoryId.toString();
+    if (!votes[categoryIdStr]) return null;
+    return votes[categoryIdStr];
 }
 
 function getCategoryVotes(categoryId) {
+    if (categoryId === null || categoryId === undefined) {
+        console.warn('Invalid categoryId provided to getCategoryVotes:', categoryId);
+        return {};
+    }
+    
+    const categoryIdStr = categoryId.toString();
     const categoryVotes = {};
     
-    Object.values(votes).forEach(userVotes => {
-        const nominee = userVotes[categoryId];
-        if (nominee) {
-            categoryVotes[nominee] = (categoryVotes[nominee] || 0) + 1;
+    // Different structure depending on if we're in admin or student view
+    if (currentUser && currentUser.id === ADMIN_CODE) {
+        // In admin view, votes is organized by categoryId -> userId -> nomineeId
+        const categoryData = votes[categoryIdStr] || {};
+        
+        // Count votes for each nominee
+        Object.values(categoryData).forEach(nomineeId => {
+            // Skip null or undefined nomineeId values
+            if (nomineeId === null || nomineeId === undefined) {
+                console.warn('Skipping invalid nomineeId in category', categoryIdStr);
+                return;
+            }
+            categoryVotes[nomineeId] = (categoryVotes[nomineeId] || 0) + 1;
+        });
+    } else {
+        // In student view, votes is directly categoryId -> nomineeId
+        if (votes[categoryIdStr]) {
+            const nominee = votes[categoryIdStr];
+            if (nominee !== null && nominee !== undefined) {
+                categoryVotes[nominee] = 1;
+            }
         }
-    });
+    }
     
     return categoryVotes;
 }
@@ -534,22 +697,50 @@ function updateVoteDisplay(categoryId) {
 }
 
 function showVotersForNominee(categoryId, nominee) {
+    // Validate parameters
+    if (categoryId === null || categoryId === undefined || nominee === null || nominee === undefined) {
+        console.warn('Invalid parameters for showVotersForNominee:', { categoryId, nominee });
+        return;
+    }
+    
     // Find the category
     const category = categories.find(c => c.id === categoryId);
-    if (!category) return;
+    if (!category) {
+        console.warn('Category not found:', categoryId);
+        return;
+    }
     
     // Get all voters for this nominee
     const voters = [];
+    const categoryIdStr = categoryId.toString();
     
-    Object.entries(votes).forEach(([userId, userVotes]) => {
-        if (userVotes[categoryId] === nominee) {
-            // Find student name
-            const student = students.find(s => s.id === parseInt(userId));
-            if (student) {
-                voters.push(student.name);
+    // If this category exists in votes
+    if (votes[categoryIdStr]) {
+        // Iterate through all users who voted for this category
+        Object.entries(votes[categoryIdStr]).forEach(([userId, nomineeId]) => {
+            // Skip invalid entries
+            if (userId === null || userId === undefined || nomineeId === null || nomineeId === undefined) {
+                console.warn('Invalid vote entry found:', { userId, nomineeId });
+                return;
             }
-        }
-    });
+            
+            // If this user voted for the specified nominee
+            if (nomineeId === nominee) {
+                try {
+                    // Find student name
+                    const parsedUserId = parseInt(userId);
+                    const student = students.find(s => s.id === parsedUserId);
+                    if (student) {
+                        voters.push(student.name);
+                    } else {
+                        console.warn('Student not found for ID:', parsedUserId);
+                    }
+                } catch (error) {
+                    console.error('Error processing voter:', error);
+                }
+            }
+        });
+    }
     
     // Create modal for showing voters
     const modal = document.createElement('div');
@@ -692,82 +883,180 @@ function showNextCategory() {
     }
 }
 
-// Add new functions for reset functionality
+// Function to show confirmation dialog for resetting votes
 function confirmResetVotes() {
-    // Create confirmation modal
+    console.log('Opening reset votes confirmation dialog');
+    
+    // Create a modal for confirmation
     const modal = document.createElement('div');
-    modal.classList.add('voters-modal');
+    modal.className = 'voters-modal';
     
     modal.innerHTML = `
         <div class="voters-modal-content">
             <div class="voters-modal-header">
-                <h3>Reset All Votes</h3>
+                <h3><i class="fas fa-exclamation-triangle"></i> Reset All Votes</h3>
                 <button class="close-modal"><i class="fas fa-times"></i></button>
             </div>
             <div class="voters-modal-body">
                 <p>Are you sure you want to reset all votes? This action cannot be undone.</p>
                 <div class="modal-buttons">
                     <button class="btn cancel-btn">Cancel</button>
-                    <button class="btn confirm-reset-btn">Reset All Votes</button>
+                    <button class="btn confirm-reset-btn">Yes, Reset All Votes</button>
                 </div>
             </div>
         </div>
     `;
     
-    // Add close functionality
-    modal.querySelector('.close-modal').addEventListener('click', () => {
-        document.body.removeChild(modal);
-    });
-    
-    // Add cancel button functionality
-    modal.querySelector('.cancel-btn').addEventListener('click', () => {
-        document.body.removeChild(modal);
-    });
-    
-    // Add confirm reset functionality
-    modal.querySelector('.confirm-reset-btn').addEventListener('click', () => {
-        resetAllVotes();
-        document.body.removeChild(modal);
-    });
-    
-    // Close when clicking outside the modal content
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            document.body.removeChild(modal);
-        }
-    });
-    
     // Add to body
     document.body.appendChild(modal);
+    
+    // Function to close the modal
+    const closeModal = () => {
+        if (document.body.contains(modal)) {
+            document.body.removeChild(modal);
+        }
+    };
+    
+    // Setup event listeners - using try/catch to prevent any errors
+    try {
+        const closeBtn = modal.querySelector('.close-modal');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeModal);
+        }
+        
+        const cancelBtn = modal.querySelector('.cancel-btn');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', closeModal);
+        }
+        
+        const confirmBtn = modal.querySelector('.confirm-reset-btn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', async () => {
+                console.log('Confirm reset button clicked');
+                await resetAllVotes();
+                closeModal();
+                
+                // Force refresh of admin dashboard
+                try {
+                    if (currentUser?.id === ADMIN_CODE) {
+                        console.log('Refreshing admin dashboard after reset');
+                        await showAdminDashboard();
+                    }
+                } catch (error) {
+                    console.error('Error refreshing dashboard after reset:', error);
+                }
+            });
+        }
+        
+        // Close when clicking outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+    } catch (error) {
+        console.error('Error setting up reset confirmation dialog:', error);
+    }
 }
 
-function resetAllVotes() {
-    // Reset votes
-    votes = {};
-    localStorage.setItem('votes', JSON.stringify(votes));
-    
-    // Show success notification
+// Function to reset all votes
+async function resetAllVotes() {
+    try {
+        console.log('Resetting all votes');
+        
+        if (LOCAL_MODE) {
+            // In local mode, just clear the votes in localStorage
+            // Define the key to match what's in localApi.js
+            const LOCAL_VOTES_KEY = 'cse6_local_votes';
+            
+            // Try both direct access and API approach
+            try {
+                console.log('Direct localStorage reset attempt');
+                localStorage.setItem(LOCAL_VOTES_KEY, JSON.stringify({}));
+                console.log('Direct reset successful');
+            } catch (localError) {
+                console.error('Error with direct localStorage reset:', localError);
+            }
+            
+            // Also try the API approach to make sure we reset properly
+            console.log('API-based reset attempt (local mode)');
+            const token = localStorage.getItem('token');
+            console.log('Using token for reset:', token);
+            
+            const response = await fetch(`${API_URL}/admin/reset-votes`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                console.log('API reset successful (local mode)');
+            } else {
+                console.error('API reset failed (local mode):', await response.text());
+            }
+            
+            // Regardless of method, clear memory
+            votes = {};
+            console.log('All votes have been reset in local mode');
+        } else {
+            // In production mode, call the API to reset votes
+            const token = localStorage.getItem('token');
+            console.log('Using token for reset (production):', token);
+            
+            const response = await fetch(`${API_URL}/admin/reset-votes`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Reset API error:', errorText);
+                throw new Error('Failed to reset votes: ' + errorText);
+            }
+            
+            console.log('All votes have been reset in the database');
+            
+            // Clear votes from memory
+            votes = {};
+        }
+        
+        // Show success message
+        showNotification('All votes have been reset successfully!');
+        
+        // Refresh admin dashboard to show updated data
+        renderResults();
+        updateStatistics();
+        
+        return true; // indicate success
+    } catch (error) {
+        console.error('Error resetting votes:', error);
+        showError('Failed to reset votes. Please try again.');
+        return false; // indicate failure
+    }
+}
+
+// Function to show notification
+function showNotification(message) {
+    // Create notification element
     const notification = document.createElement('div');
-    notification.classList.add('vote-notification');
-    notification.innerHTML = `
-        <i class="fas fa-check-circle"></i>
-        <span>All votes have been reset!</span>
-    `;
+    notification.className = 'vote-notification';
+    notification.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
     
     // Add to body
     document.body.appendChild(notification);
     
-    // Remove after animation
+    // Remove after 3 seconds
     setTimeout(() => {
         notification.classList.add('fade-out');
         setTimeout(() => {
             document.body.removeChild(notification);
         }, 500);
-    }, 2000);
-    
-    // Refresh admin dashboard
-    renderResults();
-    updateStatistics();
+    }, 3000);
 }
 
 // Add CSS for reset button and modal
@@ -781,6 +1070,10 @@ resetStyle.textContent = `
     
     .reset-btn:hover {
         background-color: #c82333 !important;
+    }
+    
+    .reset-btn i {
+        margin-right: 5px;
     }
     
     .modal-buttons {
@@ -827,7 +1120,7 @@ winnersStyle.textContent = `
         margin-right: 8px;
     }
 `;
-document.head.appendChild(winnersStyle);
+document.head.appendChild(winnersStyle); 
 
 // Add auto-refresh for admin dashboard
 let adminRefreshInterval;
@@ -876,3 +1169,53 @@ spinnerStyle.textContent = `
     }
 `;
 document.head.appendChild(spinnerStyle); 
+
+// Function to add Reset Votes button to admin dashboard
+function addResetButton() {
+    console.log('Adding reset button to admin dashboard');
+    
+    // Wait for DOM to be ready
+    setTimeout(() => {
+        try {
+            // Check if button already exists
+            if (document.getElementById('reset-votes-btn')) {
+                console.log('Reset button already exists, skipping creation');
+                return;
+            }
+            
+            // Get the admin controls container
+            const adminControls = document.querySelector('.admin-controls');
+            if (!adminControls) {
+                console.error('Admin controls not found');
+                return;
+            }
+            
+            console.log('Creating reset votes button for admin dashboard');
+            
+            // Create the reset button
+            const resetButton = document.createElement('button');
+            resetButton.id = 'reset-votes-btn';
+            resetButton.className = 'btn reset-btn';
+            resetButton.innerHTML = '<i class="fas fa-trash-alt"></i> Reset All Votes';
+            resetButton.style.display = 'inline-block';
+            resetButton.style.marginRight = '10px';
+            
+            // Add event listener
+            resetButton.addEventListener('click', function() {
+                console.log('Reset votes button clicked');
+                confirmResetVotes();
+            });
+            
+            // Insert at beginning of admin controls
+            if (adminControls.firstChild) {
+                adminControls.insertBefore(resetButton, adminControls.firstChild);
+            } else {
+                adminControls.appendChild(resetButton);
+            }
+            
+            console.log('Reset votes button added to admin dashboard');
+        } catch (error) {
+            console.error('Error adding reset button:', error);
+        }
+    }, 500); // Wait for DOM to be ready
+} 

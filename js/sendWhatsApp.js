@@ -62,60 +62,53 @@ Let's make this celebration epic! 🎊`;
 function showWhatsAppLinksModal(studentsWithPhones) {
     // Create modal container
     const modal = document.createElement('div');
-    modal.classList.add('whatsapp-modal');
+    modal.className = 'whatsapp-links-modal';
     
     // Create modal content
     const modalContent = document.createElement('div');
-    modalContent.classList.add('whatsapp-modal-content');
+    modalContent.className = 'whatsapp-modal-content';
     
-    // Add header
-    modalContent.innerHTML = `
-        <div class="modal-header">
-            <h2>Send IDs via WhatsApp</h2>
-            <button class="close-modal">&times;</button>
-        </div>
-        <div class="modal-body">
-            <p>Click each link below to send the ID to each student:</p>
-            <div class="whatsapp-links">
-                ${studentsWithPhones.map((student, index) => `
-                    <div class="whatsapp-link-item">
-                        <span class="student-number">${index + 1}.</span>
-                        <span class="student-name">${student.name}</span>
-                        <a href="${createWhatsAppLink(student)}" target="_blank" class="whatsapp-link">
-                            <i class="fab fa-whatsapp"></i> Send ID
-                        </a>
-                    </div>
-                `).join('')}
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button class="open-all-btn">Open All Links</button>
-        </div>
-    `;
-    
-    // Add modal to container
-    modal.appendChild(modalContent);
-    
-    // Add close functionality
-    const closeBtn = modalContent.querySelector('.close-modal');
-    closeBtn.addEventListener('click', () => {
+    // Create close button
+    const closeButton = document.createElement('span');
+    closeButton.className = 'whatsapp-modal-close';
+    closeButton.innerHTML = '&times;';
+    closeButton.onclick = () => {
         document.body.removeChild(modal);
-    });
+    };
     
-    // Add open all functionality
-    const openAllBtn = modalContent.querySelector('.open-all-btn');
-    openAllBtn.addEventListener('click', () => {
+    // Create title
+    const title = document.createElement('h2');
+    title.textContent = 'Send Student IDs via WhatsApp';
+    
+    // Create list container
+    const listContainer = document.createElement('div');
+    listContainer.className = 'whatsapp-links-list';
+    
+    // Add students to list
         studentsWithPhones.forEach(student => {
-            window.open(createWhatsAppLink(student), '_blank');
-        });
+        const listItem = document.createElement('div');
+        listItem.className = 'whatsapp-link-item';
+        
+        const studentInfo = document.createElement('div');
+        studentInfo.className = 'student-info';
+        studentInfo.innerHTML = `<strong>${student.name}</strong><br>ID: ${student.id}<br>Phone: ${student.phone}`;
+        
+        const sendButton = document.createElement('a');
+        sendButton.className = 'whatsapp-send-btn';
+        sendButton.innerHTML = '<i class="fab fa-whatsapp"></i> Send ID';
+        sendButton.href = createWhatsAppLink(student);
+        sendButton.target = '_blank';
+        
+        listItem.appendChild(studentInfo);
+        listItem.appendChild(sendButton);
+        listContainer.appendChild(listItem);
     });
     
-    // Close when clicking outside
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            document.body.removeChild(modal);
-        }
-    });
+    // Add elements to modal
+    modalContent.appendChild(closeButton);
+    modalContent.appendChild(title);
+    modalContent.appendChild(listContainer);
+    modal.appendChild(modalContent);
     
     // Add modal to body
     document.body.appendChild(modal);
@@ -123,106 +116,68 @@ function showWhatsAppLinksModal(studentsWithPhones) {
     // Add modal styles
     const modalStyle = document.createElement('style');
     modalStyle.textContent = `
-        .whatsapp-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
+        .whatsapp-links-modal {
             display: flex;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
             justify-content: center;
             align-items: center;
-            z-index: 1000;
         }
         
         .whatsapp-modal-content {
-            background: #1a1a2e;
-            border-radius: 10px;
+            background-color: white;
             padding: 20px;
+            border-radius: 10px;
             max-width: 600px;
             width: 90%;
             max-height: 80vh;
             overflow-y: auto;
+            position: relative;
         }
         
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .modal-header h2 {
-            margin: 0;
-            color: #fff;
-        }
-        
-        .close-modal {
-            background: none;
-            border: none;
-            color: #fff;
+        .whatsapp-modal-close {
+            position: absolute;
+            top: 10px;
+            right: 15px;
             font-size: 24px;
             cursor: pointer;
         }
         
-        .whatsapp-links {
+        .whatsapp-links-list {
+            margin-top: 20px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 15px;
         }
         
         .whatsapp-link-item {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 10px;
             padding: 10px;
-            background: rgba(255, 255, 255, 0.1);
             border-radius: 5px;
+            background-color: #f0f0f0;
         }
         
-        .student-number {
-            color: #a0a0a0;
-            min-width: 30px;
-        }
-        
-        .student-name {
-            color: #fff;
-            flex: 1;
-        }
-        
-        .whatsapp-link {
-            background: #25D366;
+        .whatsapp-send-btn {
+            background-color: #25D366;
             color: white;
-            padding: 5px 15px;
+            padding: 8px 15px;
             border-radius: 5px;
             text-decoration: none;
+            font-weight: bold;
             display: flex;
             align-items: center;
             gap: 5px;
         }
         
-        .whatsapp-link:hover {
-            background: #128C7E;
-        }
-        
-        .modal-footer {
-            margin-top: 20px;
-            display: flex;
-            justify-content: flex-end;
-        }
-        
-        .open-all-btn {
-            background: #25D366;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        
-        .open-all-btn:hover {
-            background: #128C7E;
+        .whatsapp-send-btn i {
+            font-size: 18px;
         }
     `;
     document.head.appendChild(modalStyle);
@@ -259,34 +214,57 @@ function addSendIdButton() {
     adminControls.insertBefore(sendButton, adminControls.firstChild);
 }
 
-// Show notification function
+// Function to show notification
 function showNotification(message) {
-    // Remove any existing notifications first
-    const existingNotification = document.querySelector('.vote-notification');
-    if (existingNotification) {
-        existingNotification.remove();
-    }
-    
+    // Create notification element
     const notification = document.createElement('div');
-    notification.classList.add('vote-notification');
-    notification.innerHTML = `
-        <i class="fas fa-info-circle"></i>
-        <span>${message}</span>
-    `;
+    notification.className = 'vote-notification';
+    notification.innerHTML = `<i class="fa fa-check-circle"></i> ${message}`;
     
+    // Add to body
     document.body.appendChild(notification);
     
-    // Only start the removal timeout for completion messages
-    if (message.includes('Completed!')) {
+    // Remove after 3 seconds
         setTimeout(() => {
             notification.classList.add('fade-out');
             setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
+            document.body.removeChild(notification);
             }, 500);
         }, 3000);
-    }
+    
+    // Add notification styles
+    const notificationStyle = document.createElement('style');
+    notificationStyle.textContent = `
+        .vote-notification {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: #25D366;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+        }
+        
+        .vote-notification i {
+            margin-right: 10px;
+        }
+        
+        .vote-notification.fade-out {
+            animation: fadeOut 0.5s forwards;
+        }
+        
+        @keyframes fadeOut {
+            100% {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+    `;
+    document.head.appendChild(notificationStyle);
 }
 
 // Add the button when admin dashboard is shown
@@ -328,4 +306,37 @@ style.textContent = `
         animation: spin 1s linear infinite;
     }
 `;
-document.head.appendChild(style); 
+document.head.appendChild(style);
+
+const notificationStyle = document.createElement('style');
+notificationStyle.textContent = `
+    .vote-notification {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        background-color: #25D366;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        z-index: 1000;
+    }
+    
+    .vote-notification i {
+        margin-right: 10px;
+    }
+    
+    .vote-notification.fade-out {
+        animation: fadeOut 0.5s forwards;
+    }
+    
+    @keyframes fadeOut {
+        100% {
+            opacity: 0;
+            transform: translateX(100%);
+        }
+    }
+`;
+document.head.appendChild(notificationStyle); 

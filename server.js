@@ -114,6 +114,25 @@ app.get('/api/admin/votes', authenticateToken, async (req, res) => {
     }
 });
 
+// Admin endpoint to reset all votes
+app.post('/api/admin/reset-votes', authenticateToken, async (req, res) => {
+    try {
+        // Verify admin access
+        if (req.user.userId !== 999999) {
+            return res.status(403).json({ message: 'Admin access required' });
+        }
+        
+        // Delete all votes from the database
+        await Vote.deleteMany({});
+        
+        console.log('All votes have been reset by admin');
+        res.json({ message: 'All votes have been reset successfully' });
+    } catch (error) {
+        console.error('Error resetting votes:', error);
+        res.status(500).json({ message: 'Server error while resetting votes' });
+    }
+});
+
 // Initialize database with student data
 const initializeDatabase = async () => {
     try {
