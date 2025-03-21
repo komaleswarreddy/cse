@@ -1,0 +1,10 @@
+[33mcommit 91c5bf95ee4079c0249b8d76b7abbea79f4e65fd[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Komaleswar <n210038@rguktn.ac.in>
+Date:   Fri Mar 21 12:57:51 2025 -0500
+
+    hi
+
+M	index.html
+M	js/data.js
+M	js/script.js
+M	js/sendWhatsApp.js

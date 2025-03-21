@@ -70,7 +70,7 @@ const ADMIN_CODE = 999999;
 const categories = [
     {
         id: 1,
-        name: "MISS QUEEN OF CSE6",
+        name: "MISS QUEEN OF  The  CSE6",
         icon: "👑",
         nominees: ["NAKSHATRA", "S.V. POOJITHA", "CHUSMALATHA", "HARSHITHA", "SHABHANA"]
     },

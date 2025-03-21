@@ -265,7 +265,7 @@ async function handleLogin() {
         }
     } catch (error) {
         console.error('Login error:', error);
-        showError(error.message || 'Login failed. Please try again.');
+        showError(error.message || 'Login failed Check. Please try again.');
     } finally {
         // Reset login button
         loginBtn.disabled = false;

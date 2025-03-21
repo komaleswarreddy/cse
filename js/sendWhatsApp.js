@@ -84,7 +84,7 @@ function createWhatsAppLink(student) {
 
 Hey ${student.name} 👋,
 
-Brace yourself for the most legendary and unforgettable event of the Sem – The DEBBA DEBBA Awards! 🌟🎭
+Brace yourself for the most legendary and unforgettable event of the Sem – The DEBBA DEBBA Awards!🌟🎭
 
 🔐 Your VIP Access Code: ${student.id}
 🌐 Website: https://hilariawards.netlify.app/
