@@ -72,52 +72,92 @@ const students = [
 students.push({ id: 999999, name: "Admin", phone: "" });
 
 async function connectToDatabase() {
-    if (cachedDb) {
+    if (cachedDb && mongoose.connection.readyState === 1) {
         console.log('Using cached database connection');
         return cachedDb;
     }
 
     try {
         console.log('Attempting to connect to MongoDB...');
+        console.log('MongoDB URI:', process.env.MONGODB_URI ? 'URI exists' : 'URI is missing');
+        
+        // Close any existing connection
+        if (mongoose.connection.readyState !== 0) {
+            await mongoose.connection.close();
+        }
+
         const connection = await mongoose.connect(process.env.MONGODB_URI, {
             useNewUrlParser: true,
-            useUnifiedTopology: true
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000
         });
+        
         console.log('MongoDB connected successfully');
         cachedDb = connection;
 
-        // Initialize database with students if empty
-        const User = connection.models.User || connection.model('User', userSchema);
-        const count = await User.countDocuments();
-        console.log('Current user count in database:', count);
+        // Define models before checking count
+        const userSchema = new mongoose.Schema({
+            id: { type: Number, required: true, unique: true },
+            name: { type: String, required: true },
+            phone: String
+        });
 
-        if (count === 0) {
-            console.log('Database is empty. Initializing with student data...');
+        // Clear existing model if it exists
+        mongoose.deleteModel(/^User$/);
+        const User = mongoose.model('User', userSchema);
+
+        // Check if collection exists
+        const collections = await mongoose.connection.db.listCollections().toArray();
+        const userCollectionExists = collections.some(col => col.name === 'users');
+        
+        if (!userCollectionExists) {
+            console.log('Users collection does not exist, creating and initializing...');
             try {
+                await User.createCollection();
                 await User.insertMany(students);
-                console.log('Successfully inserted', students.length, 'students');
+                console.log('Successfully initialized database with', students.length, 'students');
             } catch (initError) {
                 console.error('Error during student data initialization:', initError);
-                throw initError;
+                if (initError.code === 11000) {
+                    console.log('Duplicate key error, attempting to drop and recreate collection...');
+                    await mongoose.connection.db.dropCollection('users');
+                    await User.insertMany(students);
+                    console.log('Successfully reinitialized database after dropping collection');
+                } else {
+                    throw initError;
+                }
             }
         } else {
-            console.log('Database already contains users, skipping initialization');
+            // Check if collection is empty
+            const count = await User.countDocuments();
+            console.log('Current user count in database:', count);
+            
+            if (count === 0) {
+                console.log('Database is empty. Initializing with student data...');
+                await User.insertMany(students);
+                console.log('Successfully inserted', students.length, 'students');
+            } else if (count !== students.length) {
+                console.log('Updating student data...');
+                await User.deleteMany({});
+                await User.insertMany(students);
+                console.log('Successfully updated student data');
+            } else {
+                console.log('Database already contains correct number of users');
+            }
         }
 
+        // Verify data
+        const verifyCount = await User.countDocuments();
+        console.log('Verification: database contains', verifyCount, 'users');
+        
         return connection;
     } catch (error) {
-        console.error('MongoDB connection error:', error);
+        console.error('MongoDB connection/initialization error:', error);
         throw error;
     }
 }
 
 // Models
-const userSchema = new mongoose.Schema({
-    id: { type: Number, required: true, unique: true },
-    name: { type: String, required: true },
-    phone: String
-});
-
 const voteSchema = new mongoose.Schema({
     userId: { type: Number, required: true },
     categoryId: { type: String, required: true },
@@ -125,7 +165,6 @@ const voteSchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now }
 });
 
-let User = mongoose.models.User || mongoose.model('User', userSchema);
 let Vote = mongoose.models.Vote || mongoose.model('Vote', voteSchema);
 
 // Helper function to verify JWT token
@@ -187,16 +226,43 @@ exports.handler = async (event, context) => {
                     };
                 }
 
+                // Get User model after connection
+                const User = mongoose.model('User');
+                
+                // Verify database connection
+                if (mongoose.connection.readyState !== 1) {
+                    console.log('Database connection lost, attempting to reconnect...');
+                    await connectToDatabase();
+                }
+
                 const user = await User.findOne({ id: parsedCode });
                 console.log('Database query result:', user);
                 
                 if (!user) {
-                    console.log('No user found with code:', parsedCode);
-                    return {
-                        statusCode: 401,
-                        headers,
-                        body: JSON.stringify({ message: 'Invalid code - user not found' })
-                    };
+                    // Double-check if database needs initialization
+                    const count = await User.countDocuments();
+                    if (count === 0) {
+                        console.log('Database appears empty, attempting reinitialization...');
+                        await connectToDatabase();
+                        // Try finding the user again
+                        const retryUser = await User.findOne({ id: parsedCode });
+                        if (!retryUser) {
+                            console.log('User still not found after reinitialization');
+                            return {
+                                statusCode: 401,
+                                headers,
+                                body: JSON.stringify({ message: 'Invalid code - user not found' })
+                            };
+                        }
+                        user = retryUser;
+                    } else {
+                        console.log('No user found with code:', parsedCode);
+                        return {
+                            statusCode: 401,
+                            headers,
+                            body: JSON.stringify({ message: 'Invalid code - user not found' })
+                        };
+                    }
                 }
 
                 const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
