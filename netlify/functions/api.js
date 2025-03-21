@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
+// Get JWT secret from environment or use a default (for development only)
+const JWT_SECRET = process.env.JWT_SECRET || 'cse6-poll-system-default-secret-key';
+
+// In-memory storage for votes when MongoDB is not available
+let inMemoryVotes = [];
+
 // MongoDB Connection
 let cachedDb = null;
 
@@ -85,8 +91,18 @@ async function connectToDatabase() {
         if (mongoose.connection.readyState !== 0) {
             await mongoose.connection.close();
         }
+        
+        let connection;
+        
+        // If no MongoDB URI is provided, use in-memory MongoDB
+        if (!process.env.MONGODB_URI) {
+            console.log('No MongoDB URI provided, using in-memory storage');
+            // We'll use local storage approach instead of trying to connect to MongoDB
+            cachedDb = { ready: true };
+            return cachedDb;
+        }
 
-        const connection = await mongoose.connect(process.env.MONGODB_URI, {
+        connection = await mongoose.connect(process.env.MONGODB_URI, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
             serverSelectionTimeoutMS: 5000
@@ -175,7 +191,7 @@ const verifyToken = (authHeader) => {
     }
 
     try {
-        return jwt.verify(token, process.env.JWT_SECRET);
+        return jwt.verify(token, JWT_SECRET);
     } catch (err) {
         console.error('Token verification error:', err);
         throw new Error('Invalid token');
@@ -226,46 +242,73 @@ exports.handler = async (event, context) => {
                     };
                 }
 
-                // Get User model after connection
-                const User = mongoose.model('User');
-                
-                // Verify database connection
-                if (mongoose.connection.readyState !== 1) {
-                    console.log('Database connection lost, attempting to reconnect...');
-                    await connectToDatabase();
-                }
+                let user = null;
 
-                const user = await User.findOne({ id: parsedCode });
-                console.log('Database query result:', user);
-                
-                if (!user) {
-                    // Double-check if database needs initialization
-                    const count = await User.countDocuments();
-                    if (count === 0) {
-                        console.log('Database appears empty, attempting reinitialization...');
+                // If database connection is not available, use in-memory approach
+                if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                    console.log('Using in-memory authentication instead of database');
+                    // Find user in the static students array
+                    user = students.find(s => s.id === parsedCode);
+                } else {
+                    // Get User model after connection
+                    const User = mongoose.model('User');
+                    
+                    // Verify database connection
+                    if (mongoose.connection.readyState !== 1) {
+                        console.log('Database connection lost, attempting to reconnect...');
                         await connectToDatabase();
-                        // Try finding the user again
-                        const retryUser = await User.findOne({ id: parsedCode });
-                        if (!retryUser) {
-                            console.log('User still not found after reinitialization');
-                            return {
-                                statusCode: 401,
-                                headers,
-                                body: JSON.stringify({ message: 'Invalid code - user not found' })
-                            };
+                    }
+
+                    user = await User.findOne({ id: parsedCode });
+                    console.log('Database query result:', user);
+                    
+                    if (!user) {
+                        // Double-check if database needs initialization
+                        const count = await User.countDocuments();
+                        if (count === 0) {
+                            console.log('Database appears empty, attempting reinitialization...');
+                            await connectToDatabase();
+                            // Try finding the user again
+                            const retryUser = await User.findOne({ id: parsedCode });
+                            if (!retryUser) {
+                                console.log('User still not found after reinitialization');
+                                
+                                // Fallback to in-memory authentication as last resort
+                                user = students.find(s => s.id === parsedCode);
+                                if (!user) {
+                                    return {
+                                        statusCode: 401,
+                                        headers,
+                                        body: JSON.stringify({ message: 'Invalid code - user not found' })
+                                    };
+                                }
+                            } else {
+                                user = retryUser;
+                            }
+                        } else {
+                            // Fallback to in-memory authentication as last resort
+                            user = students.find(s => s.id === parsedCode);
+                            if (!user) {
+                                return {
+                                    statusCode: 401,
+                                    headers,
+                                    body: JSON.stringify({ message: 'Invalid code - user not found' })
+                                };
+                            }
                         }
-                        user = retryUser;
-                    } else {
-                        console.log('No user found with code:', parsedCode);
-                        return {
-                            statusCode: 401,
-                            headers,
-                            body: JSON.stringify({ message: 'Invalid code - user not found' })
-                        };
                     }
                 }
+                
+                // At this point, we should have a user, either from DB or in-memory
+                if (!user) {
+                    return {
+                        statusCode: 401,
+                        headers,
+                        body: JSON.stringify({ message: 'Invalid code - user not found' })
+                    };
+                }
 
-                const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+                const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
                 console.log('Generated token for user:', user.name);
                 
                 return {
@@ -307,15 +350,41 @@ exports.handler = async (event, context) => {
 
             console.log(`Processing vote - User: ${userId}, Category: ${categoryId}, Nominee: ${nomineeId}`);
 
-            const existingVote = await Vote.findOne({ userId, categoryId });
-            if (existingVote) {
-                existingVote.nomineeId = nomineeId;
-                existingVote.timestamp = Date.now();
-                await existingVote.save();
-                console.log('Updated existing vote');
+            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                // Use in-memory vote storage
+                console.log('Using in-memory vote storage');
+                
+                // Find existing vote
+                const existingVoteIndex = inMemoryVotes.findIndex(
+                    v => v.userId === userId && v.categoryId === categoryId
+                );
+                
+                if (existingVoteIndex >= 0) {
+                    // Update existing vote
+                    inMemoryVotes[existingVoteIndex] = {
+                        ...inMemoryVotes[existingVoteIndex],
+                        nomineeId,
+                        timestamp: new Date().toISOString()
+                    };
+                } else {
+                    // Create new vote
+                    inMemoryVotes.push({
+                        userId,
+                        categoryId,
+                        nomineeId,
+                        timestamp: new Date().toISOString()
+                    });
+                }
             } else {
-                await Vote.create({ userId, categoryId, nomineeId });
-                console.log('Created new vote');
+                // Use database
+                const existingVote = await Vote.findOne({ userId, categoryId });
+                if (existingVote) {
+                    existingVote.nomineeId = nomineeId;
+                    existingVote.timestamp = Date.now();
+                    await existingVote.save();
+                } else {
+                    await Vote.create({ userId, categoryId, nomineeId });
+                }
             }
 
             return {
@@ -327,9 +396,20 @@ exports.handler = async (event, context) => {
 
         // Get user votes
         if (path === '/votes' && event.httpMethod === 'GET') {
-            console.log(`Fetching votes for user: ${userData.userId}`);
-            const votes = await Vote.find({ userId: userData.userId });
-            console.log(`Found ${votes.length} votes for user`);
+            const userId = userData.userId;
+            
+            console.log(`Retrieving votes for user: ${userId}`);
+            
+            let votes = [];
+            
+            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                // Use in-memory vote storage
+                console.log('Using in-memory vote storage to retrieve votes');
+                votes = inMemoryVotes.filter(v => v.userId === userId);
+            } else {
+                // Use database
+                votes = await Vote.find({ userId });
+            }
             
             return {
                 statusCode: 200,
@@ -341,7 +421,7 @@ exports.handler = async (event, context) => {
         // Admin routes
         if (path === '/admin/votes' && event.httpMethod === 'GET') {
             if (userData.userId !== 999999) {
-                console.log('Unauthorized admin access attempt from user:', userData.userId);
+                console.log('Admin access denied for user:', userData.userId);
                 return {
                     statusCode: 403,
                     headers,
@@ -349,14 +429,52 @@ exports.handler = async (event, context) => {
                 };
             }
             
-            console.log('Fetching all votes for admin');
-            const votes = await Vote.find().sort({ timestamp: -1 });
-            console.log(`Found ${votes.length} total votes`);
+            console.log('Admin retrieving all votes');
+            
+            let votes = [];
+            
+            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                // Use in-memory vote storage
+                console.log('Using in-memory vote storage for admin votes');
+                votes = inMemoryVotes;
+            } else {
+                // Use database
+                votes = await Vote.find();
+            }
             
             return {
                 statusCode: 200,
                 headers,
                 body: JSON.stringify(votes)
+            };
+        }
+
+        // Admin - Reset votes
+        if (path === '/admin/reset-votes' && event.httpMethod === 'POST') {
+            if (userData.userId !== 999999) {
+                console.log('Admin access denied for user:', userData.userId);
+                return {
+                    statusCode: 403,
+                    headers,
+                    body: JSON.stringify({ message: 'Admin access required' })
+                };
+            }
+            
+            console.log('Admin resetting all votes');
+            
+            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                // Use in-memory vote storage
+                console.log('Resetting in-memory votes');
+                inMemoryVotes = [];
+            } else {
+                // Use database
+                await Vote.deleteMany({});
+            }
+            
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ message: 'All votes reset successfully' })
             };
         }
 
