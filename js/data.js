@@ -1,7 +1,7 @@
 // Student data with random 6-digit IDs
 const students = [
     // Each student has a unique 6-digit code, name and phone number
-    { id: 123456, name: "NAKSHATRA", phone: "8008647735" },
+    { id: 103456, name: "NAKSHATRA", phone: "8008647735" },
     { id: 234567, name: "S.V. POOJITHA", phone: "9347871250" },
     { id: 345678, name: "CHUSMALATHA", phone: "9491971357" },
     { id: 456789, name: "HARSHITHA", phone: "9704681883" },
@@ -72,7 +72,7 @@ const categories = [
         id: 1,
         name: "MISS QUEEN OF  The  CSE6",
         icon: "👑",
-        nominees: ["NAKSHATRA", "S.V. POOJITHA", "CHUSMALATHA", "HARSHITHA", "SHABHANA"]
+        nominees: ["NAKSHATRA", "S.V. POOJITHA", "CHUSMALATHA", "HARSHITHA", "SHABHANA","R.Vyshnavi"]
     },
     {
         id: 2,

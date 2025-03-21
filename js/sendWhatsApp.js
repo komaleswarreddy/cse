@@ -242,44 +242,10 @@ function sendAllStudentIds() {
 function addSendIdButton() {
     console.log('addSendIdButton function called');
     
-    // If button already exists, don't create it again
-    if (document.getElementById('send-id-btn')) {
-        console.log('WhatsApp send button already exists');
-        // Make sure it's visible
-        document.getElementById('send-id-btn').style.display = 'flex';
-        return;
-    }
-
-    // Create the WhatsApp button as a fixed floating button
-    const sendButton = document.createElement('button');
-    sendButton.id = 'send-id-btn';
-    sendButton.classList.add('floating-whatsapp-btn');
-    sendButton.innerHTML = '<i class="fab fa-whatsapp"></i> Send IDs via WhatsApp';
-    
-    // Add tooltip
-    sendButton.title = 'Send student IDs via WhatsApp';
-    
-    // Add event listener
-    sendButton.addEventListener('click', function(e) {
-        e.preventDefault();
-        console.log('WhatsApp send button clicked');
-        sendAllStudentIds();
-    });
-    
-    // Enhance visibility and position
-    sendButton.style.position = 'fixed';
-    sendButton.style.bottom = '30px';
-    sendButton.style.right = '30px';
-    sendButton.style.zIndex = '99999'; // Higher z-index
-    sendButton.style.display = 'flex';
-    
-    // Add directly to body for fixed positioning
-    document.body.appendChild(sendButton);
-    
-    console.log('WhatsApp send button added as floating button');
-    
-    // Force a reflow to ensure button is visible
-    void sendButton.offsetWidth;
+    // No longer adding the floating button at the bottom
+    // Only use the inline button in the admin controls
+    console.log('WhatsApp button functionality relies on inline button only now');
+    return;
 }
 
 // Function to show notification
@@ -342,7 +308,7 @@ function showNotification(message) {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOMContentLoaded event fired in sendWhatsApp.js');
     
-    // Add event listener for the inline WhatsApp button (backup solution)
+    // Add event listener for the inline WhatsApp button
     const inlineButton = document.getElementById('inline-whatsapp-btn');
     if (inlineButton) {
         console.log('Found inline WhatsApp button, adding event listener');
@@ -366,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 1000);
     }
 
-    // Function to check if we're in admin mode
+    // Keep these functions for possible future use, but don't actually add the floating button
     function isAdminDashboardVisible() {
         const adminDashboard = document.getElementById('admin-dashboard');
         return adminDashboard && 
@@ -374,144 +340,43 @@ document.addEventListener('DOMContentLoaded', () => {
                window.getComputedStyle(adminDashboard).display !== 'none');
     }
     
-    // Function to check current user is admin
     function isCurrentUserAdmin() {
         return typeof currentUser !== 'undefined' && 
                currentUser && 
                currentUser.id === ADMIN_CODE;
     }
     
-    // Initial check to add button if needed
-    setTimeout(() => {
-        console.log('Initial WhatsApp button check (after delay)');
-        if (isAdminDashboardVisible()) {
-            console.log('Admin dashboard is visible immediately, adding WhatsApp button');
-            addSendIdButton();
-        }
-    }, 1000);
-    
-    // Add a mutation observer to watch for admin dashboard visibility
-    const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            if (mutation.target.id === 'admin-dashboard' || 
-                mutation.target.closest('#admin-dashboard')) {
-                console.log('Admin dashboard mutation detected');
-                if (isAdminDashboardVisible()) {
-                    console.log('Admin dashboard now visible, adding WhatsApp button');
-                    addSendIdButton();
-                }
-            }
-        }
-    });
-    
-    // Start observing
-    observer.observe(document.body, { 
-        attributes: true, 
-        attributeFilter: ['style', 'class'],
-        childList: true, 
-        subtree: true 
-    });
-    
-    // Periodic check as a fallback
-    setInterval(() => {
-        if (isAdminDashboardVisible()) {
-            const button = document.getElementById('send-id-btn');
-            if (!button) {
-                console.log('Periodic check: Admin dashboard visible but button missing, adding it');
-                addSendIdButton();
-            }
-        }
-    }, 2000);
-    
-    // Also listen for clicks to detect user interaction with admin dashboard
-    document.addEventListener('click', () => {
-        setTimeout(() => {
-            if (isAdminDashboardVisible()) {
-                const button = document.getElementById('send-id-btn');
-                if (!button) {
-                    console.log('Click detected: Admin dashboard visible but button missing, adding it');
-                    addSendIdButton();
-                }
-            }
-        }, 100);
-    });
+    // No longer need to add the floating button
+    // All other observers and event listeners are removed
 });
 
-// Add CSS for the send ID button
+// Keep this CSS for the inline button, but removed animation for the floating button
 const whatsAppButtonStyle = document.createElement('style');
 whatsAppButtonStyle.textContent = `
-    .floating-whatsapp-btn {
-        position: fixed !important;
-        bottom: 30px !important;
-        right: 30px !important;
+    /* Styling for the inline WhatsApp button only */
+    .whatsapp-btn {
         background-color: #25D366 !important;
         color: white !important;
-        padding: 15px 25px !important;
-        font-weight: bold !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        min-width: 220px !important;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
-        border-radius: 50px !important;
-        border: 3px solid white !important;
-        font-size: 18px !important;
-        z-index: 99999 !important; /* Extremely high z-index */
-        cursor: pointer !important;
-        transition: all 0.3s ease !important;
+        margin-right: 10px;
+        display: flex;
+        align-items: center;
     }
     
-    /* Add animation to draw attention */
-    @keyframes pulse-border {
-        0% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.7); }
-        70% { box-shadow: 0 0 0 15px rgba(37, 211, 102, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(37, 211, 102, 0); }
-    }
-    
-    .floating-whatsapp-btn {
-        animation: pulse-border 2s infinite;
-    }
-    
-    .floating-whatsapp-btn:hover {
+    .whatsapp-btn:hover {
         background-color: #128C7E !important;
-        transform: translateY(-5px) !important;
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4) !important;
     }
     
-    .floating-whatsapp-btn i {
-        margin-right: 10px !important;
-        font-size: 1.5em !important;
-    }
-    
-    /* Make sure it looks good on mobile */
-    @media (max-width: 768px) {
-        .floating-whatsapp-btn {
-            width: 90% !important;
-            right: 5% !important;
-            left: 5% !important;
-            bottom: 20px !important;
-        }
+    .whatsapp-btn i {
+        margin-right: 8px;
     }
 `;
 document.head.appendChild(whatsAppButtonStyle);
 
-// Make the function globally accessible for troubleshooting
+// Make the function globally accessible for troubleshooting but it no longer adds the floating button
 window.forceAddWhatsAppButton = function() {
-    console.log('Manually forcing WhatsApp button addition');
-    addSendIdButton();
-    return "WhatsApp button addition attempted. Check if it appears now.";
+    console.log('WhatsApp button function called, but floating button is disabled');
+    return "WhatsApp functionality is available through the inline button in admin controls only.";
 };
 
-// Force add the button when this script loads if admin dashboard is visible
-setTimeout(() => {
-    const adminDashboard = document.getElementById('admin-dashboard');
-    if (adminDashboard && 
-        (adminDashboard.style.display === 'block' || 
-         window.getComputedStyle(adminDashboard).display !== 'none')) {
-        console.log('Admin dashboard detected on script load, forcing WhatsApp button');
-        addSendIdButton();
-    }
-}, 500);
-
-// Call this function when the file loads
-console.log('sendWhatsApp.js loaded. You can manually add the button by running window.forceAddWhatsAppButton() in console.'); 
+// No longer adding the floating button on script load
+console.log('sendWhatsApp.js loaded. WhatsApp functionality available through inline button only.'); 

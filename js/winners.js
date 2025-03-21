@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Winner panel password
     const WINNER_PASSWORD = '000001';
-    
+
     // API URL - Check if running locally
     const API_URL = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' 
         ? 'http://localhost:5000/api' 
@@ -192,49 +192,49 @@ document.addEventListener('DOMContentLoaded', function() {
     // Display winners
     async function displayWinners() {
         try {
-            // First make sure the sections are created
-            setupWinnerSections();
+        // First make sure the sections are created
+        setupWinnerSections();
             
             // Load votes
             const categoryVotesMap = await loadVotes();
-            
-            // Then populate with winner data
-            categories.forEach(category => {
+        
+        // Then populate with winner data
+        categories.forEach(category => {
                 try {
                     const categoryVotes = categoryVotesMap[category.id] || {};
-                    const sortedNominees = Object.entries(categoryVotes)
-                        .sort((a, b) => b[1] - a[1]);
-                    
-                    const winnersList = document.getElementById(`category${category.id}Winners`);
+            const sortedNominees = Object.entries(categoryVotes)
+                .sort((a, b) => b[1] - a[1]);
+            
+            const winnersList = document.getElementById(`category${category.id}Winners`);
                     if (!winnersList) {
                         console.error(`Winner list element not found for category ${category.id}`);
                         return;
                     }
                     
-                    winnersList.innerHTML = '';
-                    
-                    if (sortedNominees.length === 0) {
-                        const noVotesMessage = document.createElement('div');
-                        noVotesMessage.className = 'no-votes-message';
-                        noVotesMessage.textContent = 'No votes in this category yet';
-                        winnersList.appendChild(noVotesMessage);
-                        return;
-                    }
-                    
-                    // Only show the winner (first place)
-                    const [nomineeName, voteCount] = sortedNominees[0];
-                    const card = document.createElement('div');
-                    card.className = 'winner-card';
-                    
-                    card.innerHTML = `
-                        <div class="congrats-message">🎉 Congratulations! 🎉</div>
-                        <div class="winner-info">
-                            <div class="winner-name">${nomineeName}</div>
-                            <div class="winner-votes">${voteCount} vote${voteCount !== 1 ? 's' : ''}</div>
-                        </div>
-                        <div class="winner-medal">🏆</div>
-                    `;
-                    winnersList.appendChild(card);
+            winnersList.innerHTML = '';
+            
+            if (sortedNominees.length === 0) {
+                const noVotesMessage = document.createElement('div');
+                noVotesMessage.className = 'no-votes-message';
+                noVotesMessage.textContent = 'No votes in this category yet';
+                winnersList.appendChild(noVotesMessage);
+                return;
+            }
+            
+            // Only show the winner (first place)
+            const [nomineeName, voteCount] = sortedNominees[0];
+            const card = document.createElement('div');
+            card.className = 'winner-card';
+            
+            card.innerHTML = `
+                <div class="congrats-message">🎉 Congratulations! 🎉</div>
+                <div class="winner-info">
+                    <div class="winner-name">${nomineeName}</div>
+                    <div class="winner-votes">${voteCount} vote${voteCount !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="winner-medal">🏆</div>
+            `;
+            winnersList.appendChild(card);
                 } catch (categoryError) {
                     console.error(`Error displaying winner for category ${category.name}:`, categoryError);
                     // Continue with next category
