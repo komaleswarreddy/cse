@@ -24,10 +24,6 @@ let currentUser = null;
 let votes = loadVotes();
 let currentCategoryIndex = 0;
 
-// Global chart references to properly clean up when switching categories
-let categoryCharts = {};
-let adminCharts = {};
-
 // Initialize the app
 initializeApp();
 
@@ -145,24 +141,7 @@ function showAdminDashboard() {
     document.querySelector('.container').style.display = 'none';
     adminDashboard.style.display = 'block';
     
-    // Clean up any existing admin charts
-    Object.keys(adminCharts).forEach(key => {
-        if (adminCharts[key]) {
-            adminCharts[key].destroy();
-            delete adminCharts[key];
-        }
-    });
-    
-    // Render results
-    renderResults();
-    
-    // Update statistics
-    updateStatistics();
-    
-    // Create advanced analytics charts
-    createAdminCharts();
-
-    // Create reset votes button if it doesn't exist
+    // Add reset votes button if it doesn't exist
     if (!document.getElementById('reset-votes-btn')) {
         const resetBtn = document.createElement('button');
         resetBtn.id = 'reset-votes-btn';
@@ -174,6 +153,12 @@ function showAdminDashboard() {
         const adminControls = document.querySelector('.admin-controls');
         adminControls.insertBefore(resetBtn, adminControls.firstChild);
     }
+    
+    // Render results
+    renderResults();
+    
+    // Update statistics
+    updateStatistics();
 }
 
 function handleLogout() {
@@ -211,14 +196,6 @@ function handleSearch() {
 }
 
 function renderCategories() {
-    // Clean up previous charts to prevent memory leaks
-    Object.keys(categoryCharts).forEach(key => {
-        if (categoryCharts[key]) {
-            categoryCharts[key].destroy();
-            delete categoryCharts[key];
-        }
-    });
-    
     categoriesContainer.innerHTML = '';
     
     categories.forEach((category, index) => {
@@ -256,10 +233,6 @@ function renderCategories() {
         const nomineesDiv = document.createElement('div');
         nomineesDiv.classList.add('category-nominees');
         
-        // Get votes for this category to show statistics
-        const categoryVotes = getCategoryVotes(category.id);
-        const totalCategoryVotes = Object.values(categoryVotes).reduce((sum, count) => sum + count, 0);
-        
         category.nominees.forEach(nominee => {
             const checked = userVote === nominee ? 'checked' : '';
             const id = `nominee-${category.id}-${nominee.replace(/\s+/g, '-')}`;
@@ -279,7 +252,7 @@ function renderCategories() {
             input.addEventListener('change', function() {
                 if (this.checked) {
                     vote(category.id, nominee);
-                    // Update statistics after voting
+                    // Update categories after voting
                     renderCategories();
                 }
             });
@@ -287,310 +260,19 @@ function renderCategories() {
             nomineesDiv.appendChild(nomineeItem);
         });
         
-        // Create statistics section
-        const statisticsDiv = document.createElement('div');
-        statisticsDiv.classList.add('category-statistics');
+        // Add elements to category card
+        categoryCard.appendChild(categoryHeader);
+        categoryCard.appendChild(nomineesDiv);
         
-        // Only show statistics if there are votes
-        if (totalCategoryVotes > 0) {
-            // Sort nominees by vote count
-            const sortedNominees = [...category.nominees].sort((a, b) => 
-                (categoryVotes[b] || 0) - (categoryVotes[a] || 0)
-            );
-            
-            // Find the current winner
-            const winner = sortedNominees[0];
-            const winnerVotes = categoryVotes[winner] || 0;
-            
-            // Create winner card
-            const winnerCard = document.createElement('div');
-            winnerCard.classList.add('winner-card');
-            winnerCard.innerHTML = `
-                <div class="winner-info">
-                    <div class="winner-title">Current Leader</div>
-                    <div class="winner-name">${winner}</div>
-                    <div class="winner-votes">${winnerVotes} vote${winnerVotes !== 1 ? 's' : ''} (${Math.round((winnerVotes / totalCategoryVotes) * 100)}%)</div>
-                </div>
-                <div class="winner-medal">🏆</div>
-            `;
-            
-            statisticsDiv.innerHTML = `
-                <div class="category-stats-title">
-                    <i class="fas fa-chart-bar"></i>
-                    Current Results (${totalCategoryVotes} votes total)
-                </div>
-            `;
-            
-            statisticsDiv.appendChild(winnerCard);
-            
-            // Create chart controls
-            const chartsHeader = document.createElement('div');
-            chartsHeader.classList.add('charts-header');
-            chartsHeader.innerHTML = `
-                <h3>Visualization</h3>
-                <div class="visualization-tabs">
-                    <button class="viz-tab active" data-type="bar">Bar</button>
-                    <button class="viz-tab" data-type="doughnut">Doughnut</button>
-                </div>
-            `;
-            statisticsDiv.appendChild(chartsHeader);
-            
-            // Create container for the chart
-            const chartContainer = document.createElement('div');
-            chartContainer.classList.add('chart-container');
-            chartContainer.innerHTML = `<canvas id="chart-${category.id}"></canvas>`;
-            statisticsDiv.appendChild(chartContainer);
-            
-            // Create classic bar visualization for votes
-            sortedNominees.forEach(nominee => {
-                const voteCount = categoryVotes[nominee] || 0;
-                const percentage = totalCategoryVotes > 0 ? ((voteCount / totalCategoryVotes) * 100).toFixed(0) : 0;
-                
-                const nomineeStatsDiv = document.createElement('div');
-                nomineeStatsDiv.innerHTML = `
-                    <div class="nominee-stats">
-                        <span>${nominee}</span>
-                        <span class="percentage">${percentage}%</span>
-                    </div>
-                    <div class="stats-bar-container">
-                        <div class="stats-bar" style="width: ${percentage}%"></div>
-                    </div>
-                `;
-                
-                statisticsDiv.appendChild(nomineeStatsDiv);
-            });
-            
-            // Add elements to category card first, so we can access the canvas element
-            categoryCard.appendChild(categoryHeader);
-            categoryCard.appendChild(nomineesDiv);
-            categoryCard.appendChild(statisticsDiv);
-            
-            // Add card to container
-            categoriesContainer.appendChild(categoryCard);
-            
-            // Now create chart after canvas is in DOM
-            if (index === currentCategoryIndex) {
-                // Prepare chart data
-                const chartLabels = sortedNominees;
-                const chartData = sortedNominees.map(nominee => categoryVotes[nominee] || 0);
-                
-                // Create initial bar chart
-                createBarChart(category.id, chartLabels, chartData);
-                
-                // Add event listeners to chart tabs
-                document.querySelectorAll(`#category-${category.id} .viz-tab`).forEach(tab => {
-                    tab.addEventListener('click', function() {
-                        // Remove active class from all tabs
-                        document.querySelectorAll(`#category-${category.id} .viz-tab`).forEach(t => {
-                            t.classList.remove('active');
-                        });
-                        
-                        // Add active class to clicked tab
-                        this.classList.add('active');
-                        
-                        // Get chart type
-                        const chartType = this.getAttribute('data-type');
-                        
-                        // Destroy previous chart
-                        if (categoryCharts[category.id]) {
-                            categoryCharts[category.id].destroy();
-                        }
-                        
-                        // Create new chart based on type
-                        if (chartType === 'bar') {
-                            createBarChart(category.id, chartLabels, chartData);
-                        } else if (chartType === 'doughnut') {
-                            createDoughnutChart(category.id, chartLabels, chartData);
-                        }
-                    });
-                });
-            }
-        } else {
-            statisticsDiv.innerHTML = `
-                <div class="category-stats-title">
-                    <i class="fas fa-info-circle"></i>
-                    No votes yet in this category
-                </div>
-            `;
-            
-            // Add elements to category card
-            categoryCard.appendChild(categoryHeader);
-            categoryCard.appendChild(nomineesDiv);
-            categoryCard.appendChild(statisticsDiv);
-            
-            // Add card to container
-            categoriesContainer.appendChild(categoryCard);
-        }
+        // Add card to container
+        categoriesContainer.appendChild(categoryCard);
     });
     
     // Update navigation controls whenever categories are rendered
     updateNavigation();
 }
 
-function createBarChart(categoryId, labels, data) {
-    const ctx = document.getElementById(`chart-${categoryId}`).getContext('2d');
-    
-    // Define gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(121, 40, 202, 0.8)');
-    gradient.addColorStop(1, 'rgba(255, 0, 128, 0.8)');
-    
-    categoryCharts[categoryId] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Votes',
-                data: data,
-                backgroundColor: gradient,
-                borderColor: 'rgba(255, 255, 255, 0.1)',
-                borderWidth: 1,
-                borderRadius: 5,
-                barPercentage: 0.6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                    titleColor: '#e6e6e6',
-                    bodyColor: '#e6e6e6',
-                    bodyFont: {
-                        family: 'Poppins'
-                    },
-                    titleFont: {
-                        family: 'Poppins'
-                    },
-                    padding: 10,
-                    caretSize: 5,
-                    cornerRadius: 6,
-                    displayColors: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        }
-                    }
-                },
-                x: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        },
-                        // If many nominees, show fewer labels
-                        maxRotation: 45,
-                        minRotation: 45,
-                        callback: function(value, index, values) {
-                            const label = this.getLabelForValue(value);
-                            if (label.length > 10) {
-                                return label.substr(0, 10) + '...';
-                            }
-                            return label;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function createDoughnutChart(categoryId, labels, data) {
-    const ctx = document.getElementById(`chart-${categoryId}`).getContext('2d');
-    
-    // Create doughnut-specific container
-    const chartContainer = document.querySelector(`#category-${categoryId} .chart-container`);
-    chartContainer.className = 'chart-container doughnut-chart-container';
-    
-    // Define colors array
-    const colors = [
-        'rgba(121, 40, 202, 0.8)',
-        'rgba(255, 0, 128, 0.8)',
-        'rgba(0, 200, 150, 0.8)',
-        'rgba(255, 183, 0, 0.8)',
-        'rgba(0, 116, 217, 0.8)',
-        'rgba(240, 18, 190, 0.8)',
-        'rgba(127, 219, 255, 0.8)',
-        'rgba(61, 153, 112, 0.8)',
-        'rgba(255, 133, 27, 0.8)',
-        'rgba(100, 65, 165, 0.8)'
-    ];
-    
-    categoryCharts[categoryId] = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors.slice(0, labels.length),
-                borderColor: 'rgba(26, 26, 46, 0.7)',
-                borderWidth: 2,
-                hoverOffset: 15
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            cutout: '60%',
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins',
-                            size: 10
-                        },
-                        boxWidth: 10,
-                        usePointStyle: true,
-                        padding: 15
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                    titleColor: '#e6e6e6',
-                    bodyColor: '#e6e6e6',
-                    bodyFont: {
-                        family: 'Poppins'
-                    },
-                    titleFont: {
-                        family: 'Poppins'
-                    },
-                    padding: 10,
-                    caretSize: 5,
-                    cornerRadius: 6,
-                    displayColors: false
-                }
-            }
-        }
-    });
-}
-
 function renderResults() {
-    // Clean up any previous charts
-    Object.keys(categoryCharts).forEach(key => {
-        if (categoryCharts[key]) {
-            categoryCharts[key].destroy();
-            delete categoryCharts[key];
-        }
-    });
-    
     resultsWrapper.innerHTML = '';
     
     categories.forEach(category => {
@@ -657,79 +339,6 @@ function renderResults() {
         
         // Add card to container
         resultsWrapper.appendChild(resultCard);
-        
-        // Create chart if there are votes
-        if (totalVotes > 0) {
-            // Extract data for chart
-            const nominees = sortedNominees.slice(0, 5); // Only top 5 for better visibility
-            const votes = nominees.map(nominee => categoryVotes[nominee] || 0);
-            
-            // Create mini chart
-            createMiniDoughnutChart(category.id, nominees, votes);
-        }
-    });
-}
-
-function createMiniDoughnutChart(categoryId, labels, data) {
-    const ctx = document.getElementById(`result-chart-${categoryId}`).getContext('2d');
-    
-    // Define colors
-    const colors = [
-        'rgba(121, 40, 202, 0.8)',
-        'rgba(255, 0, 128, 0.8)',
-        'rgba(0, 200, 150, 0.8)',
-        'rgba(255, 183, 0, 0.8)',
-        'rgba(0, 116, 217, 0.8)'
-    ];
-    
-    categoryCharts[`result-${categoryId}`] = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: colors,
-                borderColor: 'rgba(26, 26, 46, 0.7)',
-                borderWidth: 1,
-                hoverOffset: 10
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '60%',
-            plugins: {
-                legend: {
-                    position: 'right',
-                    labels: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins',
-                            size: 10
-                        },
-                        boxWidth: 10,
-                        padding: 5
-                    }
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                    titleColor: '#e6e6e6',
-                    bodyColor: '#e6e6e6',
-                    bodyFont: {
-                        family: 'Poppins',
-                        size: 11
-                    },
-                    titleFont: {
-                        family: 'Poppins',
-                        size: 12
-                    },
-                    padding: 8,
-                    caretSize: 5,
-                    cornerRadius: 6,
-                    displayColors: false
-                }
-            }
-        }
     });
 }
 
@@ -915,373 +524,34 @@ function updateNavigation() {
     // Enable/disable navigation buttons
     prevCategoryBtn.disabled = currentCategoryIndex === 0;
     nextCategoryBtn.disabled = currentCategoryIndex === categories.length - 1;
-    
-    // If this is the last category, change Next button text
-    if (currentCategoryIndex === categories.length - 1) {
-        nextCategoryBtn.innerHTML = 'Finish <i class="fas fa-check"></i>';
-    } else {
-        nextCategoryBtn.innerHTML = 'Next <i class="fas fa-chevron-right"></i>';
-    }
 }
 
 function showPreviousCategory() {
     if (currentCategoryIndex > 0) {
         // Hide current category
-        document.querySelector(`#category-${categories[currentCategoryIndex].id}`).style.display = 'none';
-        
-        // Decrease index
-        currentCategoryIndex--;
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'none';
         
         // Show previous category
-        document.querySelector(`#category-${categories[currentCategoryIndex].id}`).style.display = 'block';
+        currentCategoryIndex--;
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'block';
         
         // Update navigation
         updateNavigation();
-        
-        // Scroll to top of the category
-        window.scrollTo({ top: categoriesContainer.offsetTop - 100, behavior: 'smooth' });
     }
 }
 
 function showNextCategory() {
     if (currentCategoryIndex < categories.length - 1) {
         // Hide current category
-        document.querySelector(`#category-${categories[currentCategoryIndex].id}`).style.display = 'none';
-        
-        // Increase index
-        currentCategoryIndex++;
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'none';
         
         // Show next category
-        document.querySelector(`#category-${categories[currentCategoryIndex].id}`).style.display = 'block';
+        currentCategoryIndex++;
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'block';
         
         // Update navigation
         updateNavigation();
-        
-        // Scroll to top of the category
-        window.scrollTo({ top: categoriesContainer.offsetTop - 100, behavior: 'smooth' });
     }
-}
-
-function createAdminCharts() {
-    // 1. Create Category Votes Chart
-    createCategoryVotesChart();
-    
-    // 2. Create Top Nominees Chart
-    createTopNomineesChart();
-    
-    // 3. Create Voting Activity Chart (dummy data as we don't track voting time)
-    createVotingActivityChart();
-}
-
-function createCategoryVotesChart() {
-    const ctx = document.getElementById('category-votes-chart').getContext('2d');
-    
-    // Collect data: total votes per category
-    const categoryNames = categories.map(c => c.name);
-    const categoryVoteCounts = categories.map(category => {
-        const categoryVotes = getCategoryVotes(category.id);
-        return Object.values(categoryVotes).reduce((sum, count) => sum + count, 0);
-    });
-    
-    // Create bar chart
-    adminCharts['categoryVotes'] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: categoryNames,
-            datasets: [{
-                label: 'Total Votes',
-                data: categoryVoteCounts,
-                backgroundColor: 'rgba(121, 40, 202, 0.7)',
-                borderColor: 'rgba(121, 40, 202, 1)',
-                borderWidth: 1,
-                borderRadius: 5,
-                barPercentage: 0.6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                    titleColor: '#e6e6e6',
-                    bodyColor: '#e6e6e6',
-                    bodyFont: {
-                        family: 'Poppins'
-                    },
-                    titleFont: {
-                        family: 'Poppins'
-                    },
-                    padding: 10,
-                    caretSize: 5,
-                    cornerRadius: 6,
-                    displayColors: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Number of Votes',
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins',
-                            size: 12
-                        }
-                    }
-                },
-                x: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        },
-                        maxRotation: 45,
-                        minRotation: 45,
-                        callback: function(value, index, values) {
-                            const label = this.getLabelForValue(value);
-                            if (label.length > 15) {
-                                return label.substr(0, 15) + '...';
-                            }
-                            return label;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function createTopNomineesChart() {
-    const ctx = document.getElementById('top-nominees-chart').getContext('2d');
-    
-    // Collect all votes across all categories
-    const allNominees = {};
-    
-    categories.forEach(category => {
-        const categoryVotes = getCategoryVotes(category.id);
-        
-        // Add votes to the nominee totals
-        for (const [nominee, voteCount] of Object.entries(categoryVotes)) {
-            allNominees[nominee] = (allNominees[nominee] || 0) + voteCount;
-        }
-    });
-    
-    // Sort nominees by total votes and get top 10
-    const sortedNominees = Object.entries(allNominees)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10);
-    
-    const nomineeNames = sortedNominees.map(entry => entry[0]);
-    const nomineeVotes = sortedNominees.map(entry => entry[1]);
-    
-    // Define colors array
-    const colors = [
-        'rgba(121, 40, 202, 0.8)',
-        'rgba(255, 0, 128, 0.8)',
-        'rgba(0, 200, 150, 0.8)',
-        'rgba(255, 183, 0, 0.8)',
-        'rgba(0, 116, 217, 0.8)',
-        'rgba(240, 18, 190, 0.8)',
-        'rgba(127, 219, 255, 0.8)',
-        'rgba(61, 153, 112, 0.8)',
-        'rgba(255, 133, 27, 0.8)',
-        'rgba(100, 65, 165, 0.8)'
-    ];
-    
-    // Create horizontal bar chart
-    adminCharts['topNominees'] = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: nomineeNames,
-            datasets: [{
-                label: 'Total Votes',
-                data: nomineeVotes,
-                backgroundColor: colors.slice(0, nomineeNames.length),
-                borderWidth: 1,
-                borderRadius: 5,
-                borderColor: 'rgba(26, 26, 46, 0.7)'
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                    titleColor: '#e6e6e6',
-                    bodyColor: '#e6e6e6',
-                    bodyFont: {
-                        family: 'Poppins'
-                    },
-                    titleFont: {
-                        family: 'Poppins'
-                    },
-                    padding: 10,
-                    caretSize: 5,
-                    cornerRadius: 6,
-                    displayColors: false
-                }
-            },
-            scales: {
-                x: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Number of Votes',
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins',
-                            size: 12
-                        }
-                    }
-                },
-                y: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
-
-function createVotingActivityChart() {
-    const ctx = document.getElementById('voting-activity-chart').getContext('2d');
-    
-    // Since we don't track voting timestamps, we'll generate some sample data
-    // for visualization purposes
-    const categories_count = categories.length;
-    const data = [];
-    
-    // Generate random data for each category (simulating voting activity over time)
-    for (let i = 0; i < categories_count; i++) {
-        const activityValue = Math.floor(Math.random() * 40) + 10; // Random value between 10-50
-        data.push(activityValue);
-    }
-    
-    // Create the line chart
-    adminCharts['votingActivity'] = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: categories.map(c => c.name),
-            datasets: [{
-                label: 'Voting Activity',
-                data: data,
-                borderColor: 'rgba(255, 0, 128, 1)',
-                backgroundColor: 'rgba(255, 0, 128, 0.1)',
-                fill: true,
-                tension: 0.4,
-                pointBackgroundColor: 'rgba(255, 0, 128, 1)',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 2,
-                pointRadius: 5,
-                pointHoverRadius: 7
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                    titleColor: '#e6e6e6',
-                    bodyColor: '#e6e6e6',
-                    bodyFont: {
-                        family: 'Poppins'
-                    },
-                    titleFont: {
-                        family: 'Poppins'
-                    },
-                    padding: 10,
-                    caretSize: 5,
-                    cornerRadius: 6,
-                    displayColors: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)'
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Activity Level',
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins',
-                            size: 12
-                        }
-                    }
-                },
-                x: {
-                    grid: {
-                        display: false
-                    },
-                    ticks: {
-                        color: '#a0a0a0',
-                        font: {
-                            family: 'Poppins'
-                        },
-                        maxRotation: 45,
-                        minRotation: 45,
-                        callback: function(value, index, values) {
-                            const label = this.getLabelForValue(value);
-                            if (label.length > 10) {
-                                return label.substr(0, 10) + '...';
-                            }
-                            return label;
-                        }
-                    }
-                }
-            }
-        }
-    });
 }
 
 // New function to show voters for a specific nominee
@@ -1337,7 +607,30 @@ function showVotersForNominee(categoryId, nominee) {
     document.body.appendChild(modal);
 }
 
-// New function to confirm reset votes
+const style = document.createElement('style');
+style.textContent = `
+    .send-id-btn {
+        background-color: #25D366 !important;
+        color: white !important;
+        margin-right: 10px;
+    }
+    
+    .send-id-btn:hover {
+        background-color: #128C7E !important;
+    }
+    
+    .send-id-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    
+    .send-id-btn i {
+        margin-right: 8px;
+    }
+`;
+document.head.appendChild(style);
+
+// Add new functions for reset functionality
 function confirmResetVotes() {
     // Create confirmation modal
     const modal = document.createElement('div');
@@ -1386,7 +679,6 @@ function confirmResetVotes() {
     document.body.appendChild(modal);
 }
 
-// New function to reset all votes
 function resetAllVotes() {
     // Reset votes
     votes = {};
@@ -1414,5 +706,44 @@ function resetAllVotes() {
     // Refresh admin dashboard
     renderResults();
     updateStatistics();
-    createAdminCharts();
-} 
+}
+
+// Add CSS for reset button and modal
+const resetStyle = document.createElement('style');
+resetStyle.textContent = `
+    .reset-btn {
+        background-color: #dc3545 !important;
+        color: white !important;
+        margin-right: 10px;
+    }
+    
+    .reset-btn:hover {
+        background-color: #c82333 !important;
+    }
+    
+    .modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    
+    .cancel-btn {
+        background-color: #6c757d !important;
+        color: white !important;
+    }
+    
+    .confirm-reset-btn {
+        background-color: #dc3545 !important;
+        color: white !important;
+    }
+    
+    .cancel-btn:hover {
+        background-color: #5a6268 !important;
+    }
+    
+    .confirm-reset-btn:hover {
+        background-color: #c82333 !important;
+    }
+`;
+document.head.appendChild(resetStyle); 
