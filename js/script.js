@@ -102,6 +102,10 @@ async function handleLogin() {
     }
     
     try {
+        // Show loading state
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+        
         const loginResponse = await fetch(`${API_URL}/login`, {
             method: 'POST',
             headers: {
@@ -110,11 +114,12 @@ async function handleLogin() {
             body: JSON.stringify({ code })
         });
 
+        const data = await loginResponse.json();
+
         if (!loginResponse.ok) {
-            throw new Error('Invalid code');
+            throw new Error(data.message || 'Invalid code');
         }
 
-        const data = await loginResponse.json();
         currentUser = data.user;
         localStorage.setItem('token', data.token);
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
@@ -143,7 +148,11 @@ async function handleLogin() {
         }
     } catch (error) {
         console.error('Login error:', error);
-        showError('Invalid code. Please try again.');
+        showError(error.message || 'Invalid code. Please try again.');
+    } finally {
+        // Reset login button
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<span>Login</span><i class="fas fa-arrow-right"></i>';
     }
 }
 
@@ -838,4 +847,21 @@ const originalHandleLogout = handleLogout;
 handleLogout = function() {
     stopAdminRefresh();
     originalHandleLogout();
-}; 
+};
+
+// Add loading spinner styles
+const spinnerStyle = document.createElement('style');
+spinnerStyle.textContent = `
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .fa-spin {
+        animation: spin 1s linear infinite;
+    }
+    .login-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+`;
+document.head.appendChild(spinnerStyle); 
