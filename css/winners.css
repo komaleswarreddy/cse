@@ -279,15 +279,50 @@ button:hover {
     }
 }
 
-.logout-btn {
-    display: block;
-    margin: 40px auto 0;
-    max-width: 200px;
-    background: var(--error-color);
+.button-container {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 30px;
 }
 
-.logout-btn:hover {
-    background: #ff4569;
+.logout-btn,
+.back-btn {
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.back-btn {
+    background: linear-gradient(45deg, #2193b0, #6dd5ed);
+}
+
+.logout-btn:hover,
+.back-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 480px) {
+    .button-container {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .logout-btn,
+    .back-btn {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
 /* Animations */

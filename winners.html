@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSE6 Winners Panel</title>
+    <meta name="description" content="CSE6 Hilaria Awards Winners Panel - View the winners of each category">
+    <meta name="theme-color" content="#7928ca">
+    <title>CSE6 Hilaria Awards - Winners Panel</title>
     <link rel="stylesheet" href="css/winners.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -11,21 +13,28 @@
 <body>
     <div class="container">
         <div class="login-section" id="loginSection">
-            <h2>Winners Panel Access</h2>
+            <h2><i class="fas fa-trophy"></i> Winners Panel Access</h2>
             <form id="loginForm">
                 <div class="form-group">
                     <input type="password" id="adminPassword" placeholder="Enter Password" required>
                 </div>
-                <button type="submit">View Winners</button>
+                <button type="submit">View Winners <i class="fas fa-arrow-right"></i></button>
             </form>
         </div>
 
         <div class="winners-section" id="winnersSection" style="display: none;">
-            <h1>🎉 CSE6 Winners Panel 🎉</h1>
+            <h1>🎉 CSE6 Hilaria Awards Winners 🎉</h1>
             <div class="winners-container">
                 <!-- Winner categories will be dynamically loaded here -->
             </div>
-            <button id="logoutBtn" class="logout-btn">Logout</button>
+            <div class="button-container">
+                <button id="logoutBtn" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+                <button id="backToMainBtn" class="back-btn" onclick="window.location.href='index.html'">
+                    <i class="fas fa-home"></i> Back to Main Page
+                </button>
+            </div>
         </div>
     </div>
     

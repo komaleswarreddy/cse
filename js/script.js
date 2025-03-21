@@ -153,6 +153,21 @@ function showAdminDashboard() {
         const adminControls = document.querySelector('.admin-controls');
         adminControls.insertBefore(resetBtn, adminControls.firstChild);
     }
+
+    // Add winners page button if it doesn't exist
+    if (!document.getElementById('view-winners-btn')) {
+        const winnersBtn = document.createElement('button');
+        winnersBtn.id = 'view-winners-btn';
+        winnersBtn.classList.add('btn', 'winners-btn');
+        winnersBtn.innerHTML = '<i class="fas fa-trophy"></i> View Winners';
+        winnersBtn.addEventListener('click', () => {
+            window.open('winners.html', '_blank');
+        });
+        
+        // Add to admin controls
+        const adminControls = document.querySelector('.admin-controls');
+        adminControls.insertBefore(winnersBtn, adminControls.firstChild);
+    }
     
     // Render results
     renderResults();
@@ -746,4 +761,23 @@ resetStyle.textContent = `
         background-color: #c82333 !important;
     }
 `;
-document.head.appendChild(resetStyle); 
+document.head.appendChild(resetStyle);
+
+// Add CSS for winners button
+const winnersStyle = document.createElement('style');
+winnersStyle.textContent = `
+    .winners-btn {
+        background-color: #ffc107 !important;
+        color: #000 !important;
+        margin-right: 10px;
+    }
+    
+    .winners-btn:hover {
+        background-color: #e0a800 !important;
+    }
+    
+    .winners-btn i {
+        margin-right: 8px;
+    }
+`;
+document.head.appendChild(winnersStyle); 
