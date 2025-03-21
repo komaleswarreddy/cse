@@ -73,20 +73,35 @@ students.push({ id: 999999, name: "Admin", phone: "" });
 
 async function connectToDatabase() {
     if (cachedDb) {
+        console.log('Using cached database connection');
         return cachedDb;
     }
 
     try {
-        const connection = await mongoose.connect(process.env.MONGODB_URI);
+        console.log('Attempting to connect to MongoDB...');
+        const connection = await mongoose.connect(process.env.MONGODB_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true
+        });
         console.log('MongoDB connected successfully');
         cachedDb = connection;
 
         // Initialize database with students if empty
+        const User = connection.models.User || connection.model('User', userSchema);
         const count = await User.countDocuments();
+        console.log('Current user count in database:', count);
+
         if (count === 0) {
-            console.log('Initializing database with student data...');
-            await User.insertMany(students);
-            console.log('Database initialized successfully');
+            console.log('Database is empty. Initializing with student data...');
+            try {
+                await User.insertMany(students);
+                console.log('Successfully inserted', students.length, 'students');
+            } catch (initError) {
+                console.error('Error during student data initialization:', initError);
+                throw initError;
+            }
+        } else {
+            console.log('Database already contains users, skipping initialization');
         }
 
         return connection;
@@ -160,20 +175,32 @@ exports.handler = async (event, context) => {
             console.log('Login attempt for code:', code);
             
             try {
-                const user = await User.findOne({ id: parseInt(code) });
-                console.log('Found user:', user);
+                const parsedCode = parseInt(code);
+                console.log('Parsed code:', parsedCode);
                 
-                if (!user) {
-                    console.log('Invalid login attempt for code:', code);
+                if (isNaN(parsedCode)) {
+                    console.log('Invalid code format - not a number');
                     return {
                         statusCode: 401,
                         headers,
-                        body: JSON.stringify({ message: 'Invalid code' })
+                        body: JSON.stringify({ message: 'Invalid code format' })
+                    };
+                }
+
+                const user = await User.findOne({ id: parsedCode });
+                console.log('Database query result:', user);
+                
+                if (!user) {
+                    console.log('No user found with code:', parsedCode);
+                    return {
+                        statusCode: 401,
+                        headers,
+                        body: JSON.stringify({ message: 'Invalid code - user not found' })
                     };
                 }
 
                 const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
-                console.log('Successful login for user:', user.name);
+                console.log('Generated token for user:', user.name);
                 
                 return {
                     statusCode: 200,
@@ -185,7 +212,11 @@ exports.handler = async (event, context) => {
                 return {
                     statusCode: 500,
                     headers,
-                    body: JSON.stringify({ message: 'Server error during login', error: error.message })
+                    body: JSON.stringify({ 
+                        message: 'Server error during login', 
+                        error: error.message,
+                        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+                    })
                 };
             }
         }

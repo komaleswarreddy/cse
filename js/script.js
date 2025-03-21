@@ -100,12 +100,18 @@ async function handleLogin() {
         showError('Please enter your 6-digit code');
         return;
     }
+
+    if (!/^\d{6}$/.test(code)) {
+        showError('Please enter a valid 6-digit code');
+        return;
+    }
     
     try {
         // Show loading state
         loginBtn.disabled = true;
         loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
         
+        console.log('Attempting login with code:', code);
         const loginResponse = await fetch(`${API_URL}/login`, {
             method: 'POST',
             headers: {
@@ -115,16 +121,19 @@ async function handleLogin() {
         });
 
         const data = await loginResponse.json();
+        console.log('Login response:', data);
 
         if (!loginResponse.ok) {
-            throw new Error(data.message || 'Invalid code');
+            throw new Error(data.message || 'Login failed');
         }
 
+        console.log('Login successful:', data.user);
         currentUser = data.user;
         localStorage.setItem('token', data.token);
         localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
         // Get user's votes after login
+        console.log('Fetching user votes...');
         const votesResponse = await fetch(`${API_URL}/votes`, {
             headers: {
                 'Authorization': `Bearer ${data.token}`
@@ -132,10 +141,12 @@ async function handleLogin() {
         });
 
         if (!votesResponse.ok) {
+            console.error('Failed to fetch votes:', await votesResponse.text());
             throw new Error('Failed to fetch votes');
         }
 
         const userVotes = await votesResponse.json();
+        console.log('User votes:', userVotes);
         votes = userVotes.reduce((acc, vote) => {
             acc[vote.categoryId] = vote.nomineeId;
             return acc;
@@ -148,7 +159,7 @@ async function handleLogin() {
         }
     } catch (error) {
         console.error('Login error:', error);
-        showError(error.message || 'Invalid code. Please try again.');
+        showError(error.message || 'Login failed. Please try again.');
     } finally {
         // Reset login button
         loginBtn.disabled = false;
@@ -160,16 +171,16 @@ function showError(message) {
     errorMessage.textContent = message;
     errorMessage.style.opacity = 1;
     
-    // Shake the input
+    // Shake animation
     codeInput.classList.add('shake');
     setTimeout(() => {
         codeInput.classList.remove('shake');
     }, 500);
     
-    // Clear error after 3 seconds
+    // Auto-hide error after 5 seconds
     setTimeout(() => {
         errorMessage.style.opacity = 0;
-    }, 3000);
+    }, 5000);
 }
 
 function showStudentDashboard() {
