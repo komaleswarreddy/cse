@@ -81,11 +81,24 @@ const verifyToken = (authHeader) => {
     }
 
     try {
-        return jwt.verify(token, JWT_SECRET);
+        console.log('Verifying token:', token);
+        const decoded = jwt.verify(token, JWT_SECRET);
+        console.log('Decoded token:', decoded);
+        return decoded;
     } catch (err) {
         console.error('Token verification error:', err);
         throw new Error('Invalid token');
     }
+};
+
+// Helper function to check if a user is an admin
+const isAdmin = (userId) => {
+    console.log('Admin check - User ID:', userId, 'Type:', typeof userId);
+    // Convert to number if it's a string and then compare
+    if (typeof userId === 'string') {
+        userId = parseInt(userId);
+    }
+    return userId === 999999;
 };
 
 exports.handler = async (event, context) => {
@@ -282,7 +295,10 @@ exports.handler = async (event, context) => {
         // Admin routes
         if (path === '/admin/votes' && event.httpMethod === 'GET') {
             try {
-                if (userData.userId !== 999999) {
+                console.log('Admin check - User ID from token:', userData.userId);
+                
+                // Use loose comparison to handle string/number conversion
+                if (userData.userId != 999999) {
                     console.log('Admin access denied for user:', userData.userId);
                     return {
                         statusCode: 403,
@@ -291,6 +307,7 @@ exports.handler = async (event, context) => {
                     };
                 }
                 
+                console.log('Admin access granted for user:', userData.userId);
                 console.log('Admin retrieving all votes');
                 
                 // Return all votes from in-memory storage
@@ -318,7 +335,10 @@ exports.handler = async (event, context) => {
         // Admin - Reset votes
         if (path === '/admin/reset-votes' && event.httpMethod === 'POST') {
             try {
-                if (userData.userId !== 999999) {
+                console.log('Admin reset check - User ID from token:', userData.userId);
+                
+                // Use loose comparison to handle string/number conversion
+                if (userData.userId != 999999) {
                     console.log('Admin access denied for user:', userData.userId);
                     return {
                         statusCode: 403,
@@ -327,6 +347,7 @@ exports.handler = async (event, context) => {
                     };
                 }
                 
+                console.log('Admin access granted for reset. User ID:', userData.userId);
                 console.log('Admin resetting all votes');
                 
                 // Reset in-memory votes
