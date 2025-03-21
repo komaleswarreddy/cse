@@ -1,0 +1,9 @@
+{
+  "name": "cse6-poll-system-functions",
+  "version": "1.0.0",
+  "description": "CSE6 Poll System Netlify Functions",
+  "main": "api.js",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.0"
+  }
+} 
