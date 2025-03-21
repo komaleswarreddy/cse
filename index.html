@@ -9,6 +9,44 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Ensure WhatsApp button is visible and properly styled */
+        .floating-whatsapp-btn {
+            position: fixed !important;
+            bottom: 30px !important;
+            right: 30px !important;
+            background-color: #25D366 !important;
+            color: white !important;
+            padding: 15px 25px !important;
+            font-weight: bold !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-width: 220px !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+            border-radius: 50px !important;
+            border: 3px solid white !important;
+            font-size: 18px !important;
+            z-index: 99999 !important;
+            cursor: pointer !important;
+        }
+        
+        .whatsapp-btn {
+            background-color: #25D366 !important;
+            color: white !important;
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .whatsapp-btn:hover {
+            background-color: #128C7E !important;
+        }
+        
+        .whatsapp-btn i {
+            margin-right: 8px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -89,6 +127,10 @@
                     <i class="fas fa-trophy"></i>
                     <span>View Winners</span>
                 </button>
+                <button id="inline-whatsapp-btn" class="btn whatsapp-btn">
+                    <i class="fab fa-whatsapp"></i>
+                    <span>Send IDs via WhatsApp</span>
+                </button>
                 <button id="admin-logout-btn" class="btn logout-btn">
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Logout</span>
@@ -154,5 +196,80 @@
     <script src="js/script.js"></script>
     <script src="js/passwordReset.js"></script>
     <script src="js/sendWhatsApp.js"></script>
+    <!-- Initialize WhatsApp button if needed -->
+    <script>
+        // Ensure WhatsApp button is added if admin dashboard is visible
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Document loaded, checking for admin dashboard');
+            
+            // Click the inline WhatsApp button if available
+            function setupInlineButton() {
+                const inlineButton = document.getElementById('inline-whatsapp-btn');
+                if (inlineButton) {
+                    console.log('Found inline WhatsApp button in index.html script');
+                    inlineButton.addEventListener('click', function() {
+                        console.log('Inline button clicked, attempting to send IDs');
+                        // Directly invoke the function if available
+                        if (typeof sendAllStudentIds === 'function') {
+                            sendAllStudentIds();
+                        } else {
+                            console.warn('sendAllStudentIds function not available');
+                            
+                            // Try the modal directly if the function isn't available
+                            try {
+                                // Get students with phones
+                                const studentsWithPhones = students.filter(s => s.phone && s.phone.trim() !== '');
+                                if (studentsWithPhones.length > 0) {
+                                    // Attempt to show modal directly
+                                    if (typeof showWhatsAppLinksModal === 'function') {
+                                        showWhatsAppLinksModal(studentsWithPhones);
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('Error handling inline button click:', e);
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // Setup inline button immediately and after a delay
+            setupInlineButton();
+            setTimeout(setupInlineButton, 1000);
+
+            // After page is fully loaded, give one more attempt to add the floating button
+            setTimeout(function() {
+                if (document.getElementById('admin-dashboard') && 
+                    document.getElementById('admin-dashboard').style.display === 'block') {
+                    
+                    // Try inline button first
+                    const inlineButton = document.getElementById('inline-whatsapp-btn');
+                    if (inlineButton) {
+                        console.log('Using existing inline WhatsApp button');
+                    } else {
+                        console.log('Creating inline WhatsApp button as fallback');
+                        // Create inline button as a fallback
+                        try {
+                            const adminControls = document.querySelector('.admin-controls');
+                            if (adminControls) {
+                                const newButton = document.createElement('button');
+                                newButton.id = 'inline-whatsapp-btn';
+                                newButton.className = 'btn whatsapp-btn';
+                                newButton.innerHTML = '<i class="fab fa-whatsapp"></i><span>Send IDs via WhatsApp</span>';
+                                
+                                // Add after any existing buttons
+                                adminControls.appendChild(newButton);
+                                
+                                // Set up event listener
+                                setupInlineButton();
+                            }
+                        } catch (e) {
+                            console.error('Error creating inline button:', e);
+                        }
+                    }
+                }
+            }, 1500);
+        });
+    </script>
 </body>
 </html> 

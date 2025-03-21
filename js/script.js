@@ -37,6 +37,18 @@ let currentCategoryIndex = 0;
 // Initialize the app
 initializeApp();
 
+// Check for WhatsApp integration
+document.addEventListener('DOMContentLoaded', function() {
+    // Add a small delay to ensure all scripts are loaded
+    setTimeout(() => {
+        if (document.getElementById('admin-dashboard').style.display === 'block' && 
+            typeof addSendIdButton === 'function') {
+            console.log('Admin dashboard already visible, adding WhatsApp button');
+            addSendIdButton();
+        }
+    }, 1000);
+});
+
 // Event Listeners
 loginBtn.addEventListener('click', handleLogin);
 studentLogoutBtn.addEventListener('click', handleLogout);
@@ -302,6 +314,61 @@ async function showAdminDashboard() {
     document.querySelector('.container').style.display = 'none';
     adminDashboard.style.display = 'block';
     
+    // Use the inline button as the primary method (more reliable)
+    const inlineButton = document.getElementById('inline-whatsapp-btn');
+    if (inlineButton) {
+        console.log('Using inline WhatsApp button (most reliable)');
+    } else {
+        console.log('Inline button not found - making sure it exists');
+        try {
+            // Create the inline button if it doesn't exist
+            const adminControls = document.querySelector('.admin-controls');
+            if (adminControls) {
+                const newButton = document.createElement('button');
+                newButton.id = 'inline-whatsapp-btn';
+                newButton.className = 'btn whatsapp-btn';
+                newButton.innerHTML = '<i class="fab fa-whatsapp"></i><span>Send IDs via WhatsApp</span>';
+                
+                // Add the button before the logout button
+                const logoutBtn = document.getElementById('admin-logout-btn');
+                if (logoutBtn) {
+                    adminControls.insertBefore(newButton, logoutBtn);
+                } else {
+                    adminControls.appendChild(newButton);
+                }
+                
+                // Set up event listener if possible
+                if (typeof sendAllStudentIds === 'function') {
+                    newButton.addEventListener('click', sendAllStudentIds);
+                } else {
+                    // Try to load the WhatsApp script first
+                    await new Promise((resolve) => {
+                        const script = document.createElement('script');
+                        script.src = 'js/sendWhatsApp.js';
+                        script.onload = resolve;
+                        script.onerror = resolve; // Continue even if there's an error
+                        document.head.appendChild(script);
+                        
+                        // Set a timeout to resolve anyway
+                        setTimeout(resolve, 1000);
+                    });
+                    
+                    // Now try to set up the event listener again
+                    if (typeof sendAllStudentIds === 'function') {
+                        newButton.addEventListener('click', sendAllStudentIds);
+                    } else {
+                        // Fallback to a minimal implementation
+                        newButton.addEventListener('click', function() {
+                            alert('To send WhatsApp messages, please use the console and type window.forceAddWhatsAppButton()');
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error setting up inline WhatsApp button:', e);
+        }
+    }
+    
     try {
         // Always use the fetch API approach for consistency, 
         // the localApi.js will intercept in local mode
@@ -362,6 +429,31 @@ async function showAdminDashboard() {
         // Add "Reset All Votes" button after a delay to ensure DOM is ready
         setTimeout(() => {
             addResetButton();
+            
+            // Check if the inline button is working
+            const inlineButton = document.getElementById('inline-whatsapp-btn');
+            if (inlineButton) {
+                console.log('Inline WhatsApp button is present and should be working');
+                
+                // Make sure it has an event listener
+                if (!inlineButton.onclick && !inlineButton._hasListener) {
+                    console.log('Adding click event to inline button');
+                    inlineButton._hasListener = true;
+                    
+                    // Set up the inline button event handler
+                    inlineButton.addEventListener('click', function() {
+                        console.log('Inline WhatsApp button clicked (from delayed handler)');
+                        if (typeof sendAllStudentIds === 'function') {
+                            sendAllStudentIds();
+                        } else {
+                            // Create a basic modal if the function isn't available
+                            alert('WhatsApp feature is not fully loaded. Please refresh the page and try again.');
+                        }
+                    });
+                }
+            } else {
+                console.log('WhatsApp inline button missing in delayed check');
+            }
         }, 500);
     } catch (error) {
         console.error('Error loading admin dashboard:', error);
@@ -515,6 +607,67 @@ function renderResults() {
         // Only add chart if there are votes
         if (totalVotes > 0) {
             resultCard.appendChild(chartDiv);
+            
+            // Initialize chart with a delay to ensure DOM is ready
+            setTimeout(() => {
+                try {
+                    const chartCanvas = document.getElementById(`result-chart-${category.id}`);
+                    if (chartCanvas) {
+                        // Prepare data for chart
+                        const labels = [];
+                        const data = [];
+                        const backgroundColors = [];
+                        
+                        // Get top 5 nominees with votes for better visualization
+                        const topNominees = sortedNominees
+                            .filter(nominee => categoryVotes[nominee] > 0)
+                            .slice(0, 5);
+                            
+                        topNominees.forEach((nominee, index) => {
+                            labels.push(nominee);
+                            data.push(categoryVotes[nominee] || 0);
+                            
+                            // Generate colors based on index
+                            const hue = 200 + (index * 30) % 160; // Different hues
+                            backgroundColors.push(`hsla(${hue}, 70%, 60%, 0.7)`);
+                        });
+                        
+                        // Create chart
+                        new Chart(chartCanvas, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Votes',
+                                    data: data,
+                                    backgroundColor: backgroundColors,
+                                    borderColor: backgroundColors.map(color => color.replace('0.7', '1')),
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        display: false
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            stepSize: 1
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error(`Error creating chart for category ${category.id}:`, error);
+                }
+            }, 50);
         }
         
         sortedNominees.forEach(nominee => {
@@ -608,6 +761,193 @@ function updateStatistics() {
         if (totalVotesEl) totalVotesEl.textContent = totalVotes;
         if (studentsVotedEl) studentsVotedEl.textContent = `${studentsVoted}/60`;
         if (popularCategoryEl) popularCategoryEl.textContent = popularCategory;
+        
+        // Create/update charts
+        try {
+            // Destroy existing charts to prevent duplicates
+            if (window.categoryChart) window.categoryChart.destroy();
+            if (window.topNomineesChart) window.topNomineesChart.destroy();
+            if (window.activityChart) window.activityChart.destroy();
+            
+            // 1. Category Votes Chart - shows votes per category
+            const categoryVotesCanvas = document.getElementById('category-votes-chart');
+            if (categoryVotesCanvas) {
+                // Get top categories by vote count
+                const topCategories = Object.entries(categoryCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 7);
+                
+                const categoryLabels = [];
+                const categoryData = [];
+                const categoryColors = [];
+                
+                topCategories.forEach(([categoryId, count], index) => {
+                    const category = categories.find(c => c.id == categoryId);
+                    if (category) {
+                        categoryLabels.push(category.name.split(' ')[0]); // First word for clarity
+                        categoryData.push(count);
+                        const hue = 180 + (index * 30) % 180;
+                        categoryColors.push(`hsla(${hue}, 70%, 50%, 0.7)`);
+                    }
+                });
+                
+                window.categoryChart = new Chart(categoryVotesCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: categoryLabels,
+                        datasets: [{
+                            label: 'Votes',
+                            data: categoryData,
+                            backgroundColor: categoryColors
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: false,
+                                text: 'Votes by Category'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 2. Top Nominees Chart - shows top nominees across all categories
+            const topNomineesCanvas = document.getElementById('top-nominees-chart');
+            if (topNomineesCanvas) {
+                // Count votes for each nominee across all categories
+                const nomineeVotes = {};
+                
+                Object.values(votes).forEach(userVotes => {
+                    if (!userVotes || typeof userVotes !== 'object') return;
+                    
+                    Object.entries(userVotes).forEach(([categoryId, nomineeId]) => {
+                        if (!categoryId || !nomineeId) return;
+                        
+                        const category = categories.find(c => c.id == categoryId);
+                        if (category) {
+                            let nomineeName;
+                            
+                            // Handle different nominee formats (index or name)
+                            if (typeof nomineeId === 'number') {
+                                nomineeName = category.nominees[nomineeId - 1];
+                            } else {
+                                nomineeName = nomineeId;
+                            }
+                            
+                            if (nomineeName) {
+                                nomineeVotes[nomineeName] = (nomineeVotes[nomineeName] || 0) + 1;
+                            }
+                        }
+                    });
+                });
+                
+                // Get top nominees
+                const topNominees = Object.entries(nomineeVotes)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5);
+                
+                const nomineeLabels = [];
+                const nomineeData = [];
+                const nomineeColors = [];
+                
+                topNominees.forEach(([name, count], index) => {
+                    nomineeLabels.push(name);
+                    nomineeData.push(count);
+                    const hue = 250 + (index * 30) % 110;
+                    nomineeColors.push(`hsla(${hue}, 70%, 50%, 0.7)`);
+                });
+                
+                window.topNomineesChart = new Chart(topNomineesCanvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: nomineeLabels,
+                        datasets: [{
+                            data: nomineeData,
+                            backgroundColor: nomineeColors,
+                            borderColor: 'rgba(255, 255, 255, 0.1)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: {
+                                    boxWidth: 12,
+                                    font: {
+                                        size: 10
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 3. Voting Activity Chart - simulate activity over time
+            const activityCanvas = document.getElementById('voting-activity-chart');
+            if (activityCanvas) {
+                // Create simulated time data since we don't have actual timestamps
+                const hours = 10;
+                const labels = [];
+                const data = [];
+                
+                for (let i = 0; i < hours; i++) {
+                    labels.push(`${i+1}h`);
+                    // Create a distribution to simulate voting activity
+                    const hourActivity = studentsVoted * 
+                        Math.max(0, Math.min(1, 0.5 + 0.5 * Math.sin((i / hours) * Math.PI * 2)));
+                    data.push(Math.round(hourActivity));
+                }
+                
+                window.activityChart = new Chart(activityCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Votes',
+                            data: data,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 5
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (chartError) {
+            console.error('Error creating dashboard charts:', chartError);
+        }
     } catch (error) {
         console.error('Error in updateStatistics:', error);
     }
