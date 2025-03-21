@@ -333,7 +333,15 @@ exports.handler = async (event, context) => {
         // Protected routes - verify token
         let userData;
         try {
-            userData = verifyToken(event.headers.authorization);
+            // Handle case-insensitive headers in Netlify
+            const authHeader = event.headers.authorization || event.headers.Authorization;
+            
+            if (!authHeader) {
+                throw new Error('No authorization header provided');
+            }
+            
+            userData = verifyToken(authHeader);
+            console.log('Successfully verified token for user:', userData.userId);
         } catch (error) {
             console.error('Token verification failed:', error.message);
             return {
@@ -345,137 +353,252 @@ exports.handler = async (event, context) => {
 
         // Vote routes
         if (path === '/vote' && event.httpMethod === 'POST') {
-            const { categoryId, nomineeId } = body;
-            const userId = userData.userId;
-
-            console.log(`Processing vote - User: ${userId}, Category: ${categoryId}, Nominee: ${nomineeId}`);
-
-            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
-                // Use in-memory vote storage
-                console.log('Using in-memory vote storage');
+            try {
+                const { categoryId, nomineeId } = body;
                 
-                // Find existing vote
-                const existingVoteIndex = inMemoryVotes.findIndex(
-                    v => v.userId === userId && v.categoryId === categoryId
-                );
-                
-                if (existingVoteIndex >= 0) {
-                    // Update existing vote
-                    inMemoryVotes[existingVoteIndex] = {
-                        ...inMemoryVotes[existingVoteIndex],
-                        nomineeId,
-                        timestamp: new Date().toISOString()
+                // Validate input
+                if (!categoryId || nomineeId === undefined || nomineeId === null) {
+                    console.error('Invalid vote data:', { categoryId, nomineeId });
+                    return {
+                        statusCode: 400,
+                        headers,
+                        body: JSON.stringify({ message: 'Invalid vote data. Both categoryId and nomineeId are required.' })
                     };
-                } else {
-                    // Create new vote
-                    inMemoryVotes.push({
-                        userId,
-                        categoryId,
-                        nomineeId,
-                        timestamp: new Date().toISOString()
-                    });
                 }
-            } else {
-                // Use database
-                const existingVote = await Vote.findOne({ userId, categoryId });
-                if (existingVote) {
-                    existingVote.nomineeId = nomineeId;
-                    existingVote.timestamp = Date.now();
-                    await existingVote.save();
-                } else {
-                    await Vote.create({ userId, categoryId, nomineeId });
-                }
-            }
+                
+                const userId = userData.userId;
+                console.log(`Processing vote - User: ${userId}, Category: ${categoryId}, Nominee: ${nomineeId}`);
 
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({ message: 'Vote recorded successfully' })
-            };
+                if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                    // Use in-memory vote storage
+                    console.log('Using in-memory vote storage');
+                    
+                    // Find existing vote
+                    const existingVoteIndex = inMemoryVotes.findIndex(
+                        v => v.userId === userId && v.categoryId === categoryId.toString()
+                    );
+                    
+                    if (existingVoteIndex >= 0) {
+                        // Update existing vote
+                        inMemoryVotes[existingVoteIndex] = {
+                            ...inMemoryVotes[existingVoteIndex],
+                            nomineeId,
+                            timestamp: new Date().toISOString()
+                        };
+                        console.log('Updated existing vote in memory');
+                    } else {
+                        // Create new vote
+                        inMemoryVotes.push({
+                            userId,
+                            categoryId: categoryId.toString(),
+                            nomineeId,
+                            timestamp: new Date().toISOString()
+                        });
+                        console.log('Created new vote in memory');
+                    }
+                } else {
+                    // Use database
+                    try {
+                        const existingVote = await Vote.findOne({ userId, categoryId: categoryId.toString() });
+                        if (existingVote) {
+                            existingVote.nomineeId = nomineeId;
+                            existingVote.timestamp = Date.now();
+                            await existingVote.save();
+                            console.log('Updated existing vote in database');
+                        } else {
+                            await Vote.create({ 
+                                userId, 
+                                categoryId: categoryId.toString(), 
+                                nomineeId 
+                            });
+                            console.log('Created new vote in database');
+                        }
+                    } catch (dbError) {
+                        console.error('Database error while recording vote:', dbError);
+                        throw new Error(`Database error: ${dbError.message}`);
+                    }
+                }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({ 
+                        message: 'Vote recorded successfully',
+                        vote: {
+                            userId,
+                            categoryId,
+                            nomineeId
+                        }
+                    })
+                };
+            } catch (voteError) {
+                console.error('Error processing vote:', voteError);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ 
+                        message: 'Error recording vote', 
+                        error: voteError.message 
+                    })
+                };
+            }
         }
 
         // Get user votes
         if (path === '/votes' && event.httpMethod === 'GET') {
-            const userId = userData.userId;
-            
-            console.log(`Retrieving votes for user: ${userId}`);
-            
-            let votes = [];
-            
-            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
-                // Use in-memory vote storage
-                console.log('Using in-memory vote storage to retrieve votes');
-                votes = inMemoryVotes.filter(v => v.userId === userId);
-            } else {
-                // Use database
-                votes = await Vote.find({ userId });
+            try {
+                const userId = userData.userId;
+                
+                console.log(`Retrieving votes for user: ${userId}`);
+                
+                let votes = [];
+                
+                if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                    // Use in-memory vote storage
+                    console.log('Using in-memory vote storage to retrieve votes');
+                    votes = inMemoryVotes.filter(v => v.userId === userId);
+                    console.log(`Found ${votes.length} votes in memory for user ${userId}`);
+                } else {
+                    // Use database
+                    try {
+                        votes = await Vote.find({ userId });
+                        console.log(`Found ${votes.length} votes in database for user ${userId}`);
+                        
+                        // Ensure all categoryId fields are strings
+                        votes = votes.map(vote => ({
+                            ...vote.toObject(),
+                            categoryId: vote.categoryId.toString()
+                        }));
+                    } catch (dbError) {
+                        console.error('Database error while retrieving votes:', dbError);
+                        throw new Error(`Database error: ${dbError.message}`);
+                    }
+                }
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(votes)
+                };
+            } catch (votesError) {
+                console.error('Error retrieving votes:', votesError);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ 
+                        message: 'Error retrieving votes', 
+                        error: votesError.message 
+                    })
+                };
             }
-            
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify(votes)
-            };
         }
 
         // Admin routes
         if (path === '/admin/votes' && event.httpMethod === 'GET') {
-            if (userData.userId !== 999999) {
-                console.log('Admin access denied for user:', userData.userId);
+            try {
+                if (userData.userId !== 999999) {
+                    console.log('Admin access denied for user:', userData.userId);
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ message: 'Admin access required' })
+                    };
+                }
+                
+                console.log('Admin retrieving all votes');
+                
+                let votes = [];
+                
+                if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                    // Use in-memory vote storage
+                    console.log('Using in-memory vote storage for admin votes');
+                    votes = [...inMemoryVotes]; // Create a copy to avoid mutations
+                    console.log(`Found ${votes.length} votes in memory for admin`);
+                } else {
+                    // Use database
+                    try {
+                        votes = await Vote.find().sort({ timestamp: -1 });
+                        console.log(`Found ${votes.length} votes in database for admin`);
+                        
+                        // Convert mongoose documents to plain objects with string categoryIds
+                        votes = votes.map(vote => ({
+                            ...vote.toObject(),
+                            categoryId: vote.categoryId.toString()
+                        }));
+                    } catch (dbError) {
+                        console.error('Database error while retrieving admin votes:', dbError);
+                        throw new Error(`Database error: ${dbError.message}`);
+                    }
+                }
+                
                 return {
-                    statusCode: 403,
+                    statusCode: 200,
                     headers,
-                    body: JSON.stringify({ message: 'Admin access required' })
+                    body: JSON.stringify(votes)
+                };
+            } catch (adminError) {
+                console.error('Error retrieving admin votes:', adminError);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ 
+                        message: 'Error retrieving admin votes', 
+                        error: adminError.message 
+                    })
                 };
             }
-            
-            console.log('Admin retrieving all votes');
-            
-            let votes = [];
-            
-            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
-                // Use in-memory vote storage
-                console.log('Using in-memory vote storage for admin votes');
-                votes = inMemoryVotes;
-            } else {
-                // Use database
-                votes = await Vote.find();
-            }
-            
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify(votes)
-            };
         }
 
         // Admin - Reset votes
         if (path === '/admin/reset-votes' && event.httpMethod === 'POST') {
-            if (userData.userId !== 999999) {
-                console.log('Admin access denied for user:', userData.userId);
+            try {
+                if (userData.userId !== 999999) {
+                    console.log('Admin access denied for user:', userData.userId);
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ message: 'Admin access required' })
+                    };
+                }
+                
+                console.log('Admin resetting all votes');
+                
+                if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
+                    // Use in-memory vote storage
+                    console.log('Resetting in-memory votes');
+                    const previousCount = inMemoryVotes.length;
+                    inMemoryVotes = [];
+                    console.log(`Reset complete. Removed ${previousCount} votes from memory.`);
+                } else {
+                    // Use database
+                    try {
+                        const result = await Vote.deleteMany({});
+                        console.log(`Reset complete. Removed ${result.deletedCount} votes from database.`);
+                    } catch (dbError) {
+                        console.error('Database error while resetting votes:', dbError);
+                        throw new Error(`Database error during reset: ${dbError.message}`);
+                    }
+                }
+                
                 return {
-                    statusCode: 403,
+                    statusCode: 200,
                     headers,
-                    body: JSON.stringify({ message: 'Admin access required' })
+                    body: JSON.stringify({ 
+                        message: 'All votes reset successfully',
+                        success: true
+                    })
+                };
+            } catch (resetError) {
+                console.error('Error resetting votes:', resetError);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ 
+                        message: 'Error resetting votes', 
+                        error: resetError.message 
+                    })
                 };
             }
-            
-            console.log('Admin resetting all votes');
-            
-            if (!process.env.MONGODB_URI || mongoose.connection.readyState !== 1) {
-                // Use in-memory vote storage
-                console.log('Resetting in-memory votes');
-                inMemoryVotes = [];
-            } else {
-                // Use database
-                await Vote.deleteMany({});
-            }
-            
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({ message: 'All votes reset successfully' })
-            };
         }
 
         console.log('Route not found:', path);
