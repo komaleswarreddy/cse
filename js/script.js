@@ -19,9 +19,12 @@ const currentCategoryEl = document.getElementById('current-category');
 const totalCategoriesEl = document.getElementById('total-categories');
 const categoryProgressBar = document.getElementById('category-progress');
 
+// API URL
+const API_URL = '/.netlify/functions/api';
+
 // State variables
 let currentUser = null;
-let votes = loadVotes();
+let votes = {};
 let currentCategoryIndex = 0;
 
 // Initialize the app
@@ -54,20 +57,41 @@ codeInput.addEventListener('keyup', function(e) {
 });
 
 // Functions
-function initializeApp() {
+async function initializeApp() {
     // Check if user is already logged in
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        if (currentUser.id === ADMIN_CODE) {
-            showAdminDashboard();
-        } else {
-            showStudentDashboard();
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            const response = await fetch(`${API_URL}/votes`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (response.ok) {
+                const userVotes = await response.json();
+                votes = userVotes.reduce((acc, vote) => {
+                    acc[vote.categoryId] = vote.nomineeId;
+                    return acc;
+                }, {});
+                
+                currentUser = JSON.parse(localStorage.getItem('currentUser'));
+                if (currentUser.id === ADMIN_CODE) {
+                    showAdminDashboard();
+                } else {
+                    showStudentDashboard();
+                }
+            } else {
+                handleLogout();
+            }
+        } catch (error) {
+            console.error('Error initializing app:', error);
+            handleLogout();
         }
     }
 }
 
-function handleLogin() {
+async function handleLogin() {
     const code = codeInput.value.trim();
     
     // Validate input
@@ -76,27 +100,48 @@ function handleLogin() {
         return;
     }
     
-    const codeNumber = parseInt(code);
-    
-    // Check if it's admin
-    if (codeNumber === ADMIN_CODE) {
-        currentUser = { id: ADMIN_CODE, name: 'Admin' };
-        saveCurrentUser();
-        showAdminDashboard();
-        return;
-    }
-    
-    // Check if it's a valid student
-    const student = students.find(s => s.id === codeNumber);
-    if (!student) {
+    try {
+        const response = await fetch(`${API_URL}/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code })
+        });
+
+        if (!response.ok) {
+            throw new Error('Invalid code');
+        }
+
+        const data = await response.json();
+        currentUser = data.user;
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+        // Get user's votes
+        const votesResponse = await fetch(`${API_URL}/votes`, {
+            headers: {
+                'Authorization': `Bearer ${data.token}`
+            }
+        });
+
+        if (votesResponse.ok) {
+            const userVotes = await votesResponse.json();
+            votes = userVotes.reduce((acc, vote) => {
+                acc[vote.categoryId] = vote.nomineeId;
+                return acc;
+            }, {});
+        }
+
+        if (currentUser.id === ADMIN_CODE) {
+            showAdminDashboard();
+        } else {
+            showStudentDashboard();
+        }
+    } catch (error) {
         showError('Invalid code. Please try again.');
-        return;
+        console.error('Login error:', error);
     }
-    
-    // Valid student
-    currentUser = student;
-    saveCurrentUser();
-    showStudentDashboard();
 }
 
 function showError(message) {
@@ -177,9 +222,11 @@ function showAdminDashboard() {
 }
 
 function handleLogout() {
-    // Clear current user
+    // Clear current user and token
     currentUser = null;
+    votes = {};
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('token');
     
     // Hide dashboards and show login container
     document.querySelector('.container').style.display = 'flex';
@@ -266,7 +313,7 @@ function renderCategories() {
             const input = nomineeItem.querySelector('input');
             input.addEventListener('change', function() {
                 if (this.checked) {
-                    vote(category.id, nominee);
+                    handleVote(category.id, nominee);
                     // Update categories after voting
                     renderCategories();
                 }
@@ -392,20 +439,46 @@ function updateStatistics() {
     popularCategoryEl.textContent = popularCategory;
 }
 
-function vote(categoryId, nominee) {
-    // Create user's vote object if it doesn't exist
-    if (!votes[currentUser.id]) {
-        votes[currentUser.id] = {};
+async function handleVote(categoryId, nomineeId) {
+    try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_URL}/vote`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ categoryId, nomineeId })
+        });
+
+        if (response.ok) {
+            votes[categoryId] = nomineeId;
+            updateVoteDisplay(categoryId);
+        } else {
+            throw new Error('Failed to record vote');
+        }
+    } catch (error) {
+        console.error('Error recording vote:', error);
+        showError('Failed to record vote. Please try again.');
     }
+}
+
+function getUserVoteForCategory(categoryId) {
+    if (!votes[categoryId]) return null;
+    return votes[categoryId];
+}
+
+function getCategoryVotes(categoryId) {
+    const categoryVotes = {};
     
-    // Add or update vote
-    votes[currentUser.id][categoryId] = nominee;
+    Object.values(votes).forEach(userVotes => {
+        const nominee = userVotes[categoryId];
+        if (nominee) {
+            categoryVotes[nominee] = (categoryVotes[nominee] || 0) + 1;
+        }
+    });
     
-    // Save votes
-    saveVotes();
-    
-    // Show success animation
-    showVoteSuccess();
+    return categoryVotes;
 }
 
 function showVoteSuccess() {
@@ -429,147 +502,10 @@ function showVoteSuccess() {
     }, 2000);
 }
 
-function getUserVoteForCategory(categoryId) {
-    if (!votes[currentUser.id]) return null;
-    return votes[currentUser.id][categoryId];
+function updateVoteDisplay(categoryId) {
+    // Implementation of updateVoteDisplay method
 }
 
-function getCategoryVotes(categoryId) {
-    const categoryVotes = {};
-    
-    Object.values(votes).forEach(userVotes => {
-        const nominee = userVotes[categoryId];
-        if (nominee) {
-            categoryVotes[nominee] = (categoryVotes[nominee] || 0) + 1;
-        }
-    });
-    
-    return categoryVotes;
-}
-
-function loadVotes() {
-    const savedVotes = localStorage.getItem('votes');
-    return savedVotes ? JSON.parse(savedVotes) : {};
-}
-
-function saveVotes() {
-    localStorage.setItem('votes', JSON.stringify(votes));
-}
-
-function saveCurrentUser() {
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-}
-
-// Add CSS for vote notification
-const styleElement = document.createElement('style');
-styleElement.textContent = `
-    .shake {
-        animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-    }
-    
-    @keyframes shake {
-        10%, 90% { transform: translate3d(-1px, 0, 0); }
-        20%, 80% { transform: translate3d(2px, 0, 0); }
-        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-        40%, 60% { transform: translate3d(4px, 0, 0); }
-    }
-    
-    .vote-notification {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background: var(--success-color);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        z-index: 1000;
-        animation: slideIn 0.3s ease-out;
-    }
-    
-    .vote-notification i {
-        font-size: 1.2rem;
-    }
-    
-    .vote-notification.fade-out {
-        animation: fadeOut 0.5s forwards;
-    }
-    
-    @keyframes slideIn {
-        from { transform: translateX(100px); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-    
-    @keyframes fadeOut {
-        from { opacity: 1; }
-        to { opacity: 0; }
-    }
-`;
-document.head.appendChild(styleElement);
-
-// Auto logout after 10 minutes of inactivity
-let inactivityTimer;
-
-function resetInactivityTimer() {
-    clearTimeout(inactivityTimer);
-    if (currentUser) {
-        inactivityTimer = setTimeout(handleLogout, 10 * 60 * 1000); // 10 minutes
-    }
-}
-
-// Reset timer on user activity
-['click', 'keypress', 'mousemove', 'touchstart'].forEach(event => {
-    document.addEventListener(event, resetInactivityTimer);
-});
-
-// Initial timer start
-resetInactivityTimer();
-
-function updateNavigation() {
-    // Update current category number
-    currentCategoryEl.textContent = currentCategoryIndex + 1;
-    
-    // Update progress bar
-    const progress = ((currentCategoryIndex + 1) / categories.length) * 100;
-    categoryProgressBar.style.width = `${progress}%`;
-    
-    // Enable/disable navigation buttons
-    prevCategoryBtn.disabled = currentCategoryIndex === 0;
-    nextCategoryBtn.disabled = currentCategoryIndex === categories.length - 1;
-}
-
-function showPreviousCategory() {
-    if (currentCategoryIndex > 0) {
-        // Hide current category
-        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'none';
-        
-        // Show previous category
-        currentCategoryIndex--;
-        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'block';
-        
-        // Update navigation
-        updateNavigation();
-    }
-}
-
-function showNextCategory() {
-    if (currentCategoryIndex < categories.length - 1) {
-        // Hide current category
-        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'none';
-        
-        // Show next category
-        currentCategoryIndex++;
-        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'block';
-        
-        // Update navigation
-        updateNavigation();
-    }
-}
-
-// New function to show voters for a specific nominee
 function showVotersForNominee(categoryId, nominee) {
     // Find the category
     const category = categories.find(c => c.id === categoryId);
@@ -624,26 +560,110 @@ function showVotersForNominee(categoryId, nominee) {
 
 const style = document.createElement('style');
 style.textContent = `
-    .send-id-btn {
-        background-color: #25D366 !important;
-        color: white !important;
-        margin-right: 10px;
+    .shake {
+        animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
     }
     
-    .send-id-btn:hover {
-        background-color: #128C7E !important;
+    @keyframes shake {
+        10%, 90% { transform: translate3d(-1px, 0, 0); }
+        20%, 80% { transform: translate3d(2px, 0, 0); }
+        30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+        40%, 60% { transform: translate3d(4px, 0, 0); }
     }
     
-    .send-id-btn:disabled {
-        opacity: 0.7;
-        cursor: not-allowed;
+    .vote-notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: var(--success-color);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
     }
     
-    .send-id-btn i {
-        margin-right: 8px;
+    .vote-notification i {
+        font-size: 1.2rem;
+    }
+    
+    .vote-notification.fade-out {
+        animation: fadeOut 0.5s forwards;
+    }
+    
+    @keyframes slideIn {
+        from { transform: translateX(100px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
     }
 `;
 document.head.appendChild(style);
+
+// Auto logout after 10 minutes of inactivity
+let inactivityTimer;
+
+function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    if (currentUser) {
+        inactivityTimer = setTimeout(handleLogout, 10 * 60 * 1000); // 10 minutes
+    }
+}
+
+// Add event listeners for activity
+document.addEventListener('mousemove', resetInactivityTimer);
+document.addEventListener('keypress', resetInactivityTimer);
+
+// Initialize inactivity timer
+resetInactivityTimer();
+
+function updateNavigation() {
+    // Update current category number
+    currentCategoryEl.textContent = currentCategoryIndex + 1;
+    
+    // Update progress bar
+    const progress = ((currentCategoryIndex + 1) / categories.length) * 100;
+    categoryProgressBar.style.width = `${progress}%`;
+    
+    // Enable/disable navigation buttons
+    prevCategoryBtn.disabled = currentCategoryIndex === 0;
+    nextCategoryBtn.disabled = currentCategoryIndex === categories.length - 1;
+}
+
+function showPreviousCategory() {
+    if (currentCategoryIndex > 0) {
+        // Hide current category
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'none';
+        
+        // Show previous category
+        currentCategoryIndex--;
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'block';
+        
+        // Update navigation
+        updateNavigation();
+    }
+}
+
+function showNextCategory() {
+    if (currentCategoryIndex < categories.length - 1) {
+        // Hide current category
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'none';
+        
+        // Show next category
+        currentCategoryIndex++;
+        document.getElementById(`category-${categories[currentCategoryIndex].id}`).style.display = 'block';
+        
+        // Update navigation
+        updateNavigation();
+    }
+}
 
 // Add new functions for reset functionality
 function confirmResetVotes() {
@@ -697,7 +717,7 @@ function confirmResetVotes() {
 function resetAllVotes() {
     // Reset votes
     votes = {};
-    saveVotes();
+    localStorage.setItem('votes', JSON.stringify(votes));
     
     // Show success notification
     const notification = document.createElement('div');
