@@ -81,39 +81,21 @@ const verifyToken = (authHeader) => {
     }
 
     try {
-        console.log('Verifying token:', token);
-        const decoded = jwt.verify(token, JWT_SECRET);
-        console.log('Decoded token:', decoded);
-        return decoded;
+        return jwt.verify(token, JWT_SECRET);
     } catch (err) {
         console.error('Token verification error:', err);
         throw new Error('Invalid token');
     }
 };
 
-// Helper function to check if a user is an admin
-const isAdmin = (userId) => {
-    console.log('Admin check - User ID:', userId, 'Type:', typeof userId);
-    // Convert to number if it's a string and then compare
-    if (typeof userId === 'string') {
-        userId = parseInt(userId);
-    }
-    return userId === 999999;
-};
-
-// Add CORS headers to all responses
-const getCorsHeaders = () => {
-    return {
+exports.handler = async (event, context) => {
+    // Enable CORS
+    const headers = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Cache-Control': 'no-cache' // Prevent caching
     };
-};
-
-exports.handler = async (event, context) => {
-    // Enable CORS
-    const headers = getCorsHeaders();
 
     // Handle OPTIONS request
     if (event.httpMethod === 'OPTIONS') {
@@ -297,45 +279,10 @@ exports.handler = async (event, context) => {
             }
         }
 
-        // Admin votes
+        // Admin routes
         if (path === '/admin/votes' && event.httpMethod === 'GET') {
             try {
-                // Verify the token
-                const user = verifyToken(event.headers.authorization);
-                
-                if (!isAdmin(user.userId)) {
-                    return {
-                        statusCode: 403,
-                        headers,
-                        body: JSON.stringify({ message: 'Admin access required' })
-                    };
-                }
-                
-                console.log('Admin access granted for votes request');
-                
-                // Return the stored votes
-                return {
-                    statusCode: 200,
-                    headers,
-                    body: JSON.stringify(inMemoryVotes)
-                };
-            } catch (error) {
-                console.error('Error in admin/votes:', error);
-                return {
-                    statusCode: 401,
-                    headers,
-                    body: JSON.stringify({ message: error.message })
-                };
-            }
-        }
-
-        // Admin - Reset votes
-        if (path === '/admin/reset-votes' && event.httpMethod === 'POST') {
-            try {
-                console.log('Admin reset check - User ID from token:', userData.userId);
-                
-                // Use loose comparison to handle string/number conversion
-                if (userData.userId != 999999) {
+                if (userData.userId !== 999999) {
                     console.log('Admin access denied for user:', userData.userId);
                     return {
                         statusCode: 403,
@@ -344,7 +291,42 @@ exports.handler = async (event, context) => {
                     };
                 }
                 
-                console.log('Admin access granted for reset. User ID:', userData.userId);
+                console.log('Admin retrieving all votes');
+                
+                // Return all votes from in-memory storage
+                const votes = [...inMemoryVotes];
+                console.log(`Found ${votes.length} votes for admin`);
+                
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify(votes)
+                };
+            } catch (adminError) {
+                console.error('Error retrieving admin votes:', adminError);
+                return {
+                    statusCode: 500,
+                    headers,
+                    body: JSON.stringify({ 
+                        message: 'Error retrieving admin votes', 
+                        error: adminError.message 
+                    })
+                };
+            }
+        }
+
+        // Admin - Reset votes
+        if (path === '/admin/reset-votes' && event.httpMethod === 'POST') {
+            try {
+                if (userData.userId !== 999999) {
+                    console.log('Admin access denied for user:', userData.userId);
+                    return {
+                        statusCode: 403,
+                        headers,
+                        body: JSON.stringify({ message: 'Admin access required' })
+                    };
+                }
+                
                 console.log('Admin resetting all votes');
                 
                 // Reset in-memory votes

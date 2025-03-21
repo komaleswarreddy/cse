@@ -84,6 +84,13 @@ body {
     background: rgba(255, 255, 255, 0.1);
 }
 
+.password-hint {
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: #777;
+    text-align: center;
+}
+
 button {
     background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
     color: white;
@@ -245,9 +252,28 @@ button:hover {
 
 .no-votes-message {
     text-align: center;
-    color: var(--text-muted);
-    padding: 15px;
+    color: #777;
     font-style: italic;
+    padding: 20px;
+}
+
+.error-message {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px auto;
+    max-width: 80%;
+    text-align: center;
+}
+
+.error-message h3 {
+    color: #c00;
+    margin-bottom: 10px;
+}
+
+.error-message p {
+    color: #333;
 }
 
 /* Adding confetti effect for first place winners */

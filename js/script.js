@@ -45,6 +45,16 @@ searchInput.addEventListener('input', handleSearch);
 prevCategoryBtn.addEventListener('click', showPreviousCategory);
 nextCategoryBtn.addEventListener('click', showNextCategory);
 
+// Event listener for View Winners button
+document.getElementById('view-winners-btn')?.addEventListener('click', function() {
+    // Make sure there's an adminToken available for the winners page
+    const token = localStorage.getItem('token');
+    if (token && currentUser?.id === ADMIN_CODE) {
+        localStorage.setItem('adminToken', token);
+    }
+    window.open('winners.html', '_blank');
+});
+
 // Input validation for 6-digit code
 codeInput.addEventListener('input', function(e) {
     // Only allow numbers
@@ -146,6 +156,11 @@ async function handleLogin() {
                 
                 data = await response.json();
                 console.log('Login response:', data);
+                
+                // If admin login, also store adminToken
+                if (isAdmin) {
+                    localStorage.setItem('adminToken', data.token);
+                }
             } catch (error) {
                 console.error('Local login error:', error);
                 throw error;
@@ -162,6 +177,11 @@ async function handleLogin() {
             
             data = await response.json();
             console.log('Login response:', data);
+            
+            // If admin login, also store adminToken
+            if (isAdmin) {
+                localStorage.setItem('adminToken', data.token);
+            }
             
             if (!response.ok) {
                 throw new Error(data.message || 'Login failed');
