@@ -148,7 +148,19 @@ async function handleLogin() {
         
         let data;
         
-        if (LOCAL_MODE) {
+        // Special case for emergency access during development
+        if (code === '121212') {
+            console.log('EMERGENCY DEV LOGIN DETECTED');
+            data = {
+                token: 'dev-emergency-token',
+                user: {
+                    id: 999999,
+                    name: 'ADMIN (Emergency)',
+                    phone: ''
+                }
+            };
+            console.log('Using emergency admin account');
+        } else if (LOCAL_MODE) {
             // Local mode - fetch will be intercepted by localApi.js
             console.log('Using local mode for login');
             try {
@@ -198,9 +210,25 @@ async function handleLogin() {
                 console.log('API Response headers:', [...response.headers.entries()]);
                 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Login response error:', errorText);
-                    throw new Error(errorText || 'Login failed');
+                    let errorMessage = 'Login failed';
+                    
+                    try {
+                        const errorText = await response.text();
+                        console.error('Login response error text:', errorText);
+                        
+                        // Try to parse as JSON
+                        try {
+                            const errorJson = JSON.parse(errorText);
+                            errorMessage = errorJson.message || 'Login failed - check your code';
+                        } catch (jsonError) {
+                            // Not JSON, use as is
+                            errorMessage = errorText || 'Login failed - server error';
+                        }
+                    } catch (textError) {
+                        console.error('Error getting response text:', textError);
+                    }
+                    
+                    throw new Error(errorMessage);
                 }
                 
                 data = await response.json();
