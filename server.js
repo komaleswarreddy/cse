@@ -7,6 +7,23 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 
+// Hardcoded fallback student data
+const fallbackStudents = [
+    { id: 103456, name: "NAKSHATRA", phone: "8008647735" },
+    { id: 234567, name: "S.V. POOJITHA", phone: "9347871250" },
+    { id: 345678, name: "CHUSMALATHA", phone: "9491971357" },
+    { id: 456789, name: "HARSHITHA", phone: "9704681883" },
+    { id: 567890, name: "SHABHANA", phone: "6300468313" },
+    { id: 678901, name: "PARDHU", phone: "9121828939" },
+    { id: 789012, name: "SRINU", phone: "8185037844" },
+    { id: 890123, name: "BALU", phone: "8919421749" },
+    { id: 901234, name: "MOULI", phone: "8688206784" },
+    { id: 112233, name: "NAVANEETH", phone: "6309135641" },
+    { id: 223344, name: "ROHITH", phone: "9391458807" },
+    { id: 334455, name: "DIWAKAR", phone: "9381018470" },
+    { id: 999999, name: "ADMIN", phone: "" }
+];
+
 // CORS configuration - more permissive for debugging
 app.use(cors({
     origin: '*', // Allow all origins for now to debug the issue
@@ -278,28 +295,46 @@ const initializeDatabase = async () => {
         if (count === 0) {
             console.log('No users found in database. Initializing with student data...');
             
-            // For safety, let's define some basic students in case data.js fails to load
-            let students = [];
+            // Use fallback students as default
+            let students = [...fallbackStudents];
             
             try {
-                // Try to load from data.js
-                const dataModule = require('./js/data');
+                // Debug the current directory
+                console.log('Current directory:', __dirname);
+                
+                // Try to load from data.js with different paths
+                console.log('Attempting to load data.js...');
+                let dataModule;
+                
+                // Try different paths
+                const possiblePaths = [
+                    './js/data.js',
+                    '../js/data.js',
+                    `${__dirname}/js/data.js`,
+                    `${process.cwd()}/js/data.js`
+                ];
+                
+                for (const path of possiblePaths) {
+                    try {
+                        console.log(`Trying to load from: ${path}`);
+                        dataModule = require(path);
+                        if (dataModule && Array.isArray(dataModule.students)) {
+                            console.log(`Successfully loaded data from ${path}`);
+                            break;
+                        }
+                    } catch (pathError) {
+                        console.log(`Failed to load from ${path}: ${pathError.message}`);
+                    }
+                }
+                
                 if (dataModule && Array.isArray(dataModule.students) && dataModule.students.length > 0) {
                     students = dataModule.students;
                     console.log(`Loaded ${students.length} students from data.js`);
                 } else {
-                    console.warn('data.js did not contain valid students array');
+                    console.warn('data.js did not contain valid students array, using fallback data');
                 }
             } catch (dataError) {
                 console.error('Error loading data.js:', dataError);
-                
-                // Fallback data in case data.js is not available
-                students = [
-                    { id: 103456, name: "NAKSHATRA", phone: "8008647735" },
-                    { id: 234567, name: "S.V. POOJITHA", phone: "9347871250" },
-                    { id: 345678, name: "CHUSMALATHA", phone: "9491971357" },
-                    { id: 999999, name: "ADMIN", phone: "" }
-                ];
                 console.log('Using fallback student data');
             }
             
@@ -309,13 +344,44 @@ const initializeDatabase = async () => {
                     students.push({ id: 999999, name: "ADMIN", phone: "" });
                 }
                 
-                // Insert all students into database
-                await User.insertMany(students);
-                console.log(`Inserted ${students.length} students into database`);
+                // Log all student IDs for debugging
+                console.log('Student IDs to be inserted:', students.map(s => s.id).join(', '));
                 
-                // Verify data was inserted
-                const newCount = await User.countDocuments();
-                console.log(`New user count in database: ${newCount}`);
+                try {
+                    // Insert all students into database
+                    await User.insertMany(students);
+                    console.log(`Inserted ${students.length} students into database`);
+                    
+                    // Verify data was inserted
+                    const newCount = await User.countDocuments();
+                    console.log(`New user count in database: ${newCount}`);
+                    
+                    // Check for specific students
+                    const testStudents = [
+                        await User.findOne({ id: 103456 }),  // NAKSHATRA
+                        await User.findOne({ id: 234567 }),  // S.V. POOJITHA
+                        await User.findOne({ id: 999999 })   // ADMIN
+                    ];
+                    
+                    console.log('Test students found:', testStudents.map(s => s ? `${s.id} (${s.name})` : 'not found').join(', '));
+                } catch (insertError) {
+                    console.error('Error inserting students:', insertError);
+                    
+                    // Try inserting one by one
+                    console.log('Trying to insert students individually...');
+                    let successCount = 0;
+                    
+                    for (const student of students) {
+                        try {
+                            await User.create(student);
+                            successCount++;
+                        } catch (singleInsertError) {
+                            console.error(`Failed to insert student ${student.id}:`, singleInsertError.message);
+                        }
+                    }
+                    
+                    console.log(`Individually inserted ${successCount}/${students.length} students`);
+                }
             } else {
                 console.error('No student data available to initialize database');
             }

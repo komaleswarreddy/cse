@@ -12,7 +12,7 @@ const students = [
     { id: 901234, name: "MOULI", phone: "8688206784" },
     { id: 112233, name: "NAVANEETH", phone: "6309135641" },
     { id: 223344, name: "ROHITH", phone: "9391458807" },
-    { id: 334455, name: "DIWAKAR", phone: "9381018470" },
+    { id: 334455, name: "DIWAKAR", phone: "9381018470" }, 
     { id: 445566, name: "MAHESH", phone: "8008791096" },
     { id: 556677, name: "GANESH", phone: "9666506739" },
     { id: 667788, name: "YUVARAJ", phone: "6281523252" },
@@ -195,3 +195,10 @@ const categories = [
         nominees: ["SAMEERAJA", "VIJJI", "SUSI", "SHABHANA", "ANJALI"]
     }
 ]; 
+
+// Add proper exports for Node.js
+module.exports = {
+    students,
+    ADMIN_CODE,
+    categories
+}; 
