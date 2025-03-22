@@ -7,8 +7,21 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 
+// CORS configuration
+const corsOptions = {
+    origin: [
+        'http://localhost:3000', 
+        'http://localhost:5000',
+        'https://cse6-poll-frontend.onrender.com',
+        'https://cse6-poll.onrender.com'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // MongoDB Connection
@@ -26,7 +39,7 @@ const userSchema = new mongoose.Schema({
 const voteSchema = new mongoose.Schema({
     userId: { type: Number, required: true },
     categoryId: { type: String, required: true },
-    nomineeId: { type: Number, required: true },
+    nomineeId: { type: mongoose.Schema.Types.Mixed, required: true },
     timestamp: { type: Date, default: Date.now }
 });
 
@@ -74,30 +87,43 @@ app.post('/api/vote', authenticateToken, async (req, res) => {
         const { categoryId, nomineeId } = req.body;
         const userId = req.user.userId;
 
+        console.log(`Vote request received: userId=${userId}, categoryId=${categoryId}, nomineeId=${nomineeId}, type=${typeof nomineeId}`);
+
         // Check if user has already voted in this category
         const existingVote = await Vote.findOne({ userId, categoryId });
         if (existingVote) {
             // Update existing vote
+            console.log(`Updating existing vote for user ${userId} in category ${categoryId}`);
             existingVote.nomineeId = nomineeId;
             existingVote.timestamp = Date.now();
             await existingVote.save();
+            console.log(`Vote updated successfully`);
         } else {
             // Create new vote
-            await Vote.create({ userId, categoryId, nomineeId });
+            console.log(`Creating new vote for user ${userId} in category ${categoryId}`);
+            const newVote = await Vote.create({ userId, categoryId, nomineeId });
+            console.log(`New vote created with ID: ${newVote._id}`);
         }
 
         res.json({ message: 'Vote recorded successfully' });
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error recording vote:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 });
 
 app.get('/api/votes', authenticateToken, async (req, res) => {
     try {
-        const votes = await Vote.find({ userId: req.user.userId });
+        const userId = req.user.userId;
+        console.log(`Fetching votes for user ${userId}`);
+        
+        const votes = await Vote.find({ userId });
+        console.log(`Found ${votes.length} votes for user ${userId}`);
+        
         res.json(votes);
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error fetching votes:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 });
 
@@ -131,6 +157,15 @@ app.post('/api/admin/reset-votes', authenticateToken, async (req, res) => {
         console.error('Error resetting votes:', error);
         res.status(500).json({ message: 'Server error while resetting votes' });
     }
+});
+
+// Health check route
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
 });
 
 // Initialize database with student data

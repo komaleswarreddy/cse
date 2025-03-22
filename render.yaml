@@ -3,6 +3,7 @@ services:
   - type: web
     name: cse6-poll-api
     env: node
+    plan: free
     buildCommand: npm install
     startCommand: node server.js
     envVars:
@@ -12,6 +13,10 @@ services:
         sync: false
       - key: PORT
         value: 10000
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /api/health
+    autoDeploy: true
     routes:
       - type: rewrite
         source: /api/*
@@ -25,11 +30,11 @@ services:
     staticPublishPath: .
     routes:
       - type: rewrite
+        source: /api/*
+        destination: https://cse6-poll-api.onrender.com/api/:splat
+      - type: rewrite
         source: /*
         destination: /index.html
     envVars:
       - key: API_URL
-        fromService:
-          name: cse6-poll-api
-          type: web
-          property: url 
+        value: https://cse6-poll-api.onrender.com/api 
