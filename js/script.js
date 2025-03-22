@@ -179,24 +179,40 @@ async function handleLogin() {
             }
         } else {
             // Production mode - use real API
-            const response = await fetch(`${API_URL}/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ code })
-            });
-            
-            data = await response.json();
-            console.log('Login response:', data);
-            
-            // If admin login, also store adminToken
-            if (isAdmin) {
-                localStorage.setItem('adminToken', data.token);
-            }
-            
-            if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
+            console.log('Using production API for login:', `${API_URL}/login`);
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'omit', // Don't send cookies for cross-site requests
+                    mode: 'cors', // Explicitly state we want CORS
+                    body: JSON.stringify({ code })
+                });
+                
+                // Log response details for debugging
+                console.log('API Response status:', response.status);
+                console.log('API Response headers:', [...response.headers.entries()]);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Login response error:', errorText);
+                    throw new Error(errorText || 'Login failed');
+                }
+                
+                data = await response.json();
+                console.log('Login response data:', data);
+                
+                // If admin login, also store adminToken
+                if (isAdmin) {
+                    localStorage.setItem('adminToken', data.token);
+                }
+            } catch (error) {
+                console.error('API login error:', error);
+                throw error;
             }
         }
 

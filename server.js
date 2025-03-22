@@ -7,22 +7,29 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 
-// CORS configuration
-const corsOptions = {
-    origin: [
-        'http://localhost:3000', 
-        'http://localhost:5000',
-        'https://cse6-poll-frontend.onrender.com',
-        'https://cse6-poll-frontendd.onrender.com',
-        'https://cse6-poll.onrender.com'
-    ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
-};
+// CORS configuration - more permissive for debugging
+app.use(cors({
+    origin: '*', // Allow all origins for now to debug the issue
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+}));
 
-// Middleware
-app.use(cors(corsOptions));
+// Additional headers for CORS
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(204).end();
+    }
+    next();
+});
+
 app.use(express.json());
 
 // MongoDB Connection
@@ -160,12 +167,24 @@ app.post('/api/admin/reset-votes', authenticateToken, async (req, res) => {
     }
 });
 
-// Health check route
+// Health check route with CORS verification
 app.get('/api/health', (req, res) => {
+    // Return the request's origin to help debug CORS
+    const requestOrigin = req.headers.origin || 'No origin header';
+    const requestMethod = req.method;
+    const requestHeaders = req.headers;
+    
     res.json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
-        mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+        mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        environment: process.env.NODE_ENV || 'development',
+        cors: {
+            origin: requestOrigin,
+            method: requestMethod,
+            allowedOrigins: '*',
+            headers: requestHeaders
+        }
     });
 });
 
