@@ -24,7 +24,7 @@ const categoryProgressBar = document.getElementById('category-progress');
 // API URL - Check if running locally
 const API_URL = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' 
     ? 'http://localhost:5000/api' 
-    : '/.netlify/functions/api';
+    : '/api';  // Updated for Render deployment
 
 // Enable local mode for testing without a server
 const LOCAL_MODE = (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
