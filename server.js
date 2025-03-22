@@ -58,16 +58,39 @@ const Vote = mongoose.model('Vote', voteSchema);
 app.post('/api/login', async (req, res) => {
     try {
         const { code } = req.body;
-        const user = await User.findOne({ id: parseInt(code) });
+        console.log(`Login attempt with code: ${code}`);
+        
+        if (!code) {
+            return res.status(400).json({ message: 'Code is required' });
+        }
+        
+        const parsedCode = parseInt(code);
+        console.log(`Parsed code as number: ${parsedCode}`);
+        
+        // Special case for admin code
+        if (parsedCode === 999999) {
+            console.log('Admin login detected');
+            // Create admin user if not exists in database
+            const adminUser = { id: 999999, name: "ADMIN", phone: "" };
+            const token = jwt.sign({ userId: adminUser.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+            return res.json({ token, user: adminUser });
+        }
+        
+        // Try to find user
+        const user = await User.findOne({ id: parsedCode });
+        console.log(`User lookup result: ${user ? 'Found' : 'Not found'}`);
         
         if (!user) {
+            console.log(`No user found with id: ${parsedCode}`);
             return res.status(401).json({ message: 'Invalid code' });
         }
 
         const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '24h' });
+        console.log(`Login successful for user: ${user.name}`);
         res.json({ token, user });
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'Server error', error: error.message });
     }
 });
 
@@ -167,6 +190,32 @@ app.post('/api/admin/reset-votes', authenticateToken, async (req, res) => {
     }
 });
 
+// Route to manually initialize database (for troubleshooting)
+app.get('/api/init-db', async (req, res) => {
+    try {
+        console.log('Manual database initialization requested');
+        await initializeDatabase();
+        
+        // Count users after initialization
+        const count = await User.countDocuments();
+        const sampleUsers = await User.find().limit(5);
+        
+        res.json({
+            success: true,
+            message: 'Database initialization triggered',
+            userCount: count,
+            sampleUsers: sampleUsers
+        });
+    } catch (error) {
+        console.error('Error in manual database initialization:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error initializing database', 
+            error: error.message 
+        });
+    }
+});
+
 // Health check route with CORS verification
 app.get('/api/health', (req, res) => {
     // Return the request's origin to help debug CORS
@@ -188,23 +237,106 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Route to check user data
+app.get('/api/check-users', async (req, res) => {
+    try {
+        // Count total users
+        const count = await User.countDocuments();
+        
+        // Get sample users
+        const users = await User.find().limit(10);
+        
+        // Check if specific test users exist
+        const testUsers = [
+            await User.findOne({ id: 103456 }),  // NAKSHATRA
+            await User.findOne({ id: 234567 }),  // S.V. POOJITHA
+            await User.findOne({ id: 999999 })   // ADMIN
+        ];
+        
+        res.json({
+            success: true,
+            userCount: count,
+            sampleUsers: users,
+            testUsers: testUsers.map(user => user ? { id: user.id, name: user.name } : null)
+        });
+    } catch (error) {
+        console.error('Error checking users:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error checking users', 
+            error: error.message 
+        });
+    }
+});
+
 // Initialize database with student data
 const initializeDatabase = async () => {
     try {
         const count = await User.countDocuments();
+        console.log(`Current user count in database: ${count}`);
+        
         if (count === 0) {
-            const students = require('./js/data').students;
-            await User.insertMany(students);
-            console.log('Database initialized with student data');
+            console.log('No users found in database. Initializing with student data...');
+            
+            // For safety, let's define some basic students in case data.js fails to load
+            let students = [];
+            
+            try {
+                // Try to load from data.js
+                const dataModule = require('./js/data');
+                if (dataModule && Array.isArray(dataModule.students) && dataModule.students.length > 0) {
+                    students = dataModule.students;
+                    console.log(`Loaded ${students.length} students from data.js`);
+                } else {
+                    console.warn('data.js did not contain valid students array');
+                }
+            } catch (dataError) {
+                console.error('Error loading data.js:', dataError);
+                
+                // Fallback data in case data.js is not available
+                students = [
+                    { id: 103456, name: "NAKSHATRA", phone: "8008647735" },
+                    { id: 234567, name: "S.V. POOJITHA", phone: "9347871250" },
+                    { id: 345678, name: "CHUSMALATHA", phone: "9491971357" },
+                    { id: 999999, name: "ADMIN", phone: "" }
+                ];
+                console.log('Using fallback student data');
+            }
+            
+            if (students.length > 0) {
+                // Make sure admin is in the list
+                if (!students.some(s => s.id === 999999)) {
+                    students.push({ id: 999999, name: "ADMIN", phone: "" });
+                }
+                
+                // Insert all students into database
+                await User.insertMany(students);
+                console.log(`Inserted ${students.length} students into database`);
+                
+                // Verify data was inserted
+                const newCount = await User.countDocuments();
+                console.log(`New user count in database: ${newCount}`);
+            } else {
+                console.error('No student data available to initialize database');
+            }
+        } else {
+            console.log(`Database already contains ${count} users, skipping initialization`);
         }
     } catch (error) {
         console.error('Error initializing database:', error);
     }
 };
 
-initializeDatabase();
-
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
+    
+    // Make sure database is initialized after server starts
+    try {
+        console.log('Running database initialization...');
+        await initializeDatabase();
+        console.log('Database initialization complete');
+    } catch (error) {
+        console.error('Error during startup database initialization:', error);
+    }
 }); 
