@@ -17,10 +17,6 @@ services:
         value: production
     healthCheckPath: /api/health
     autoDeploy: true
-    routes:
-      - type: rewrite
-        source: /api/*
-        destination: /*
 
   # Static site (frontend)
   - type: web
