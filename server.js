@@ -13,6 +13,7 @@ const corsOptions = {
         'http://localhost:3000', 
         'http://localhost:5000',
         'https://cse6-poll-frontend.onrender.com',
+        'https://cse6-poll-frontendd.onrender.com',
         'https://cse6-poll.onrender.com'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
